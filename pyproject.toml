@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unit-cell-gui"
+version = "0.1.0"
+description = "PySide6 widget for rendering caller-supplied unit-cell scenes"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Mikhail Mirushchenko", email = "miruschenko98@gmail.com"},
+]
+dependencies = [
+    "numpy>=1.24",
+    "PySide6-Essentials>=6.8,<7",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+unit_cell_gui = ["py.typed"]
