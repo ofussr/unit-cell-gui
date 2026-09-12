@@ -19,6 +19,21 @@ colour and black-and-white drawing, and polyhedron hatching. Quadrilateral
 hatching uses one intact polygon with `2x + 1` full parallel strokes. Hatch
 directions on farther faces are refolded through real shared edges.
 
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/color-view.png" alt="Color view" width="100%">
+      <br>
+      <sub>Normal view</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/hatched-view.png" alt="Hatched view" width="100%">
+      <br>
+      <sub>Hatched view</sub>
+    </td>
+  </tr>
+</table>
+
 ## Installation
 
 ```bash
@@ -98,3 +113,11 @@ and must be enabled with `show_polyhedra=True`.
 Per-position colours, visibility and opaque-polyhedron selections are replaced
 atomically with `viewer.set_style_overrides(StyleOverrides(...))`. The widget
 copies these mappings, so the host can keep its own independent UI state.
+
+## How to cite
+
+If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22714947.svg)](https://doi.org/10.5281/zenodo.22714947)
+
+You can also use the metadata provided in [`CITATION.cff`](CITATION.cff).
