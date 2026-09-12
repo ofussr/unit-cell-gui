@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+title: unit-cell-gui
+message: "If you use this software, please cite it as below."
+type: software
+authors: 
+- family-names: Mirushchenko
+  given-names: Mikhail
+repository-code: https://github.com/ofussr/unit-cell-gui
+url: https://github.com/ofussr/unit-cell-gui
+orcid: https://orcid.org/0000-0002-5571-8525
+date-released: 2026-09-11
+doi: 10.5281/zenodo.22714947
+license: MIT
