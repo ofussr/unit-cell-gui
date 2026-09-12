@@ -24,7 +24,7 @@ directions on farther faces are refolded through real shared edges.
     <td align="center" width="50%">
       <img src="docs/images/color-view.png" alt="Color view" width="100%">
       <br>
-      <sub>Normal view</sub>
+      <sub>Color view</sub>
     </td>
     <td align="center" width="50%">
       <img src="docs/images/hatched-view.png" alt="Hatched view" width="100%">
