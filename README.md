@@ -128,6 +128,6 @@ to the same renderer class.
 
 If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
 
-[![DOI](https://zenodo.org/badge/1366573933.svg)](https://zenodo.org/badge/latestdoi/1366573933)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22714946-blue.svg)](https://doi.org/10.5281/zenodo.22714946)
 
 You can also use the metadata provided in [`CITATION.cff`](CITATION.cff).
