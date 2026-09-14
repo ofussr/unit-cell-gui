@@ -8,12 +8,15 @@ from .hatching import (
     quadrilateral_hatch_line_count,
 )
 from .models import Atom, AtomComponent, DisplayOptions, Polyhedron, Scene, StyleOverrides
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def __getattr__(name):
-    if name in {"CrystalCanvas", "UnitCellViewer", "screen_drag_orientation"}:
+    if name in {"CrystalCanvas", "UnitCellViewer", "OpenGLUnitCellViewer", "screen_drag_orientation"}:
         from .viewer import CrystalCanvas, UnitCellViewer, screen_drag_orientation
+        if name == "OpenGLUnitCellViewer":
+            from .opengl_viewer import OpenGLUnitCellViewer
+            return OpenGLUnitCellViewer
         return {
             "CrystalCanvas": CrystalCanvas,
             "UnitCellViewer": UnitCellViewer,
@@ -27,6 +30,7 @@ __all__ = [
     "CrystalCanvas",
     "DisplayOptions",
     "Polyhedron",
+    "OpenGLUnitCellViewer",
     "Scene",
     "StyleOverrides",
     "UnitCellViewer",

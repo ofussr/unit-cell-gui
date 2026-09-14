@@ -1,0 +1,68 @@
+THIRD-PARTY NOTICES
+===================
+
+This file lists third-party software used by unit-cell-gui.
+
+unit-cell-gui itself is distributed under the MIT License. The projects listed
+below are separate dependencies and are not incorporated into the
+unit-cell-gui source code. When unit-cell-gui is installed with pip, these
+dependencies are installed as separate Python distributions.
+
+This notice is provided for attribution and convenience. The authoritative
+license terms are those distributed by the respective projects.
+
+1. NumPy
+--------
+
+Project: NumPy
+Required by unit-cell-gui: numpy>=1.24
+Homepage: https://numpy.org/
+License: BSD 3-Clause License (modified BSD)
+
+Copyright (c) NumPy Developers.
+All rights reserved.
+
+NumPy is distributed under the terms of the BSD 3-Clause License. See the
+license distributed with NumPy or:
+https://numpy.org/doc/stable/license.html
+
+
+2. Qt for Python / PySide6 Essentials
+-------------------------------------
+
+Project: Qt for Python (PySide6)
+Required by unit-cell-gui: PySide6-Essentials>=6.8,<7
+Homepage: https://doc.qt.io/qtforpython-6/
+Copyright: The Qt Company Ltd. and contributors.
+License: GNU Lesser General Public License v3 (LGPLv3), GNU General Public
+License v3 (GPLv3), or the Qt Commercial License, depending on the
+distribution and licensing terms selected by the user.
+
+Qt for Python and the Qt libraries it provides may themselves contain
+third-party components with additional notices and license terms. See the
+license files and third-party notices distributed with the installed
+PySide6/Qt packages and the Qt documentation:
+https://doc.qt.io/qtforpython-6/licenses.html
+
+
+3. PyOpenGL
+-----------
+
+Project: PyOpenGL
+Required by unit-cell-gui: PyOpenGL>=3.1.7,<4
+Homepage: https://pyopengl.sourceforge.net/
+Source: https://github.com/mcfletch/pyopengl
+License: BSD License
+Author: Mike C. Fletcher and contributors.
+
+See the license distributed with PyOpenGL for the complete license text.
+
+
+Notes
+-----
+
+The version ranges above describe the direct runtime dependencies declared by
+unit-cell-gui 0.2.0. Transitive dependencies may vary depending on the
+platform and the versions selected by the Python package installer.
+
+This file does not replace the license files supplied by third-party packages.

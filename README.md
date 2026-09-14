@@ -13,7 +13,7 @@ The caller supplies ready Cartesian coordinates and presentation data:
 - three basis vectors;
 - optional polyhedron vertices, polygon faces and centres.
 
-The package owns only display behaviour: camera projection, depth sorting,
+The package owns only display behaviour: camera projection, OpenGL depth buffering,
 left-button rotation, right-button panning, wheel zoom, occupancy sectors,
 colour and black-and-white drawing, and polyhedron hatching. Quadrilateral
 hatching uses one intact polygon with `2x + 1` full parallel strokes. Hatch
@@ -22,12 +22,12 @@ directions on farther faces are refolded through real shared edges.
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/images/color-view.png" alt="Color view" width="100%">
+      <img src="https://raw.githubusercontent.com/ofussr/unit-cell-gui/main/docs/images/color-view.png" alt="Color view" width="100%">
       <br>
       <sub>Color view</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/images/hatched-view.png" alt="Hatched view" width="100%">
+      <img src="https://raw.githubusercontent.com/ofussr/unit-cell-gui/main/docs/images/hatched-view.png" alt="Hatched view" width="100%">
       <br>
       <sub>Hatched view</sub>
     </td>
@@ -40,7 +40,7 @@ directions on farther faces are refolded through real shared edges.
 python -m pip install unit-cell-gui
 ```
 
-Python 3.10 or newer, NumPy and PySide6 Essentials are required.
+Python 3.10 or newer, NumPy, PySide6 Essentials and PyOpenGL are required. The renderer requests an OpenGL 3.3 core-profile context.
 
 ## Basic use
 
@@ -114,10 +114,20 @@ Per-position colours, visibility and opaque-polyhedron selections are replaced
 atomically with `viewer.set_style_overrides(StyleOverrides(...))`. The widget
 copies these mappings, so the host can keep its own independent UI state.
 
+
+## Renderer compatibility
+
+`UnitCellViewer` and the legacy alias `CrystalCanvas` now use the OpenGL
+renderer internally. Existing construction, scene submission, display-option,
+style-override, orientation-synchronization and interaction calls remain the
+same. `OpenGLUnitCellViewer` remains available as an explicit name and refers
+to the same renderer class.
+
+
 ## How to cite
 
 If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22714947.svg)](https://doi.org/10.5281/zenodo.22714947)
+[![DOI](https://zenodo.org/badge/1366573933.svg)](https://zenodo.org/badge/latestdoi/1366573933)
 
 You can also use the metadata provided in [`CITATION.cff`](CITATION.cff).

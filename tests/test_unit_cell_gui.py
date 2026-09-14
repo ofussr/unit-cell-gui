@@ -13,7 +13,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from unit_cell_gui import (
-    Atom, AtomComponent, DisplayOptions, Polyhedron, Scene, StyleOverrides, UnitCellViewer,
+    Atom, AtomComponent, CrystalCanvas, DisplayOptions, OpenGLUnitCellViewer, Polyhedron, Scene, StyleOverrides, UnitCellViewer,
     face_hatch_segments, hatch_division_count, occupancy_fractions,
     propagated_hatch_directions, quadrilateral_hatch_line_count,
 )
@@ -185,6 +185,10 @@ class ViewerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_legacy_viewer_names_resolve_to_opengl_backend(self):
+        self.assertIs(UnitCellViewer, OpenGLUnitCellViewer)
+        self.assertIs(CrystalCanvas, UnitCellViewer)
 
     def test_input_output_orientation_and_camera_controls(self):
         viewer = UnitCellViewer()
