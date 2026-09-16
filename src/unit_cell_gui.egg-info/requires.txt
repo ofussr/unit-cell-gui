@@ -1,0 +1,3 @@
+numpy>=1.24
+PySide6-Essentials<7,>=6.8
+PyOpenGL<4,>=3.1.7

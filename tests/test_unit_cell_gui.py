@@ -8,16 +8,19 @@ import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QCoreApplication, QPoint, QPointF, Qt
+from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from unit_cell_gui import (
     Atom, AtomComponent, CrystalCanvas, DisplayOptions, OpenGLUnitCellViewer, Polyhedron, Scene, StyleOverrides, UnitCellViewer,
+    configure_qt_opengl, preferred_surface_format,
     face_hatch_segments, hatch_division_count, occupancy_fractions,
     propagated_hatch_directions, quadrilateral_hatch_line_count,
 )
 from unit_cell_gui.viewer import _polyhedron_hatches
+from unit_cell_gui.opengl_viewer import _CELL_DASH_PATTERN, _EDGE_FRAGMENT_SHADER
 
 
 def rotation(axis, degrees):
@@ -66,6 +69,25 @@ def sample_scene():
 
 
 class PureApiTests(unittest.TestCase):
+    def test_opengl_lines_use_coverage_antialiasing_and_wider_cell_dashes(self):
+        self.assertEqual(preferred_surface_format().samples(), 8)
+        self.assertIn("smoothstep", _EDGE_FRAGMENT_SHADER)
+        self.assertIn("coverage", _EDGE_FRAGMENT_SHADER)
+        self.assertEqual(_CELL_DASH_PATTERN, (8.0, 4.0))
+
+    def test_opengl_is_configured_globally_before_application_creation(self):
+        self.assertTrue(QCoreApplication.testAttribute(
+            Qt.ApplicationAttribute.AA_ShareOpenGLContexts
+        ))
+        actual = QSurfaceFormat.defaultFormat()
+        preferred = preferred_surface_format()
+        self.assertEqual((actual.majorVersion(), actual.minorVersion()), (3, 3))
+        self.assertEqual(actual.profile(), QSurfaceFormat.OpenGLContextProfile.CoreProfile)
+        self.assertEqual(actual.depthBufferSize(), preferred.depthBufferSize())
+        self.assertEqual(actual.stencilBufferSize(), preferred.stencilBufferSize())
+        self.assertEqual(actual.samples(), preferred.samples())
+        self.assertTrue(configure_qt_opengl())
+
     def test_scene_validates_ready_geometry(self):
         scene = sample_scene()
         self.assertEqual(scene.elements, ("Nb", "O", "Ta"))
@@ -189,6 +211,15 @@ class ViewerTests(unittest.TestCase):
     def test_legacy_viewer_names_resolve_to_opengl_backend(self):
         self.assertIs(UnitCellViewer, OpenGLUnitCellViewer)
         self.assertIs(CrystalCanvas, UnitCellViewer)
+
+    def test_each_viewer_uses_the_global_surface_format(self):
+        viewer = UnitCellViewer()
+        actual = viewer.format()
+        preferred = preferred_surface_format()
+        self.assertEqual((actual.majorVersion(), actual.minorVersion()), (3, 3))
+        self.assertEqual(actual.profile(), preferred.profile())
+        self.assertEqual(actual.samples(), preferred.samples())
+        viewer.close()
 
     def test_input_output_orientation_and_camera_controls(self):
         viewer = UnitCellViewer()

@@ -42,6 +42,11 @@ python -m pip install unit-cell-gui
 
 Python 3.10 or newer, NumPy, PySide6 Essentials and PyOpenGL are required. The renderer requests an OpenGL 3.3 core-profile context.
 
+Import `UnitCellViewer` or `CrystalCanvas` before constructing `QApplication`.
+This lets the package establish one shared OpenGL format for every viewer and
+keeps top-level Qt composition stable across screen and DPI changes. The basic
+example below already uses this order.
+
 ## Basic use
 
 ```python
@@ -128,6 +133,6 @@ to the same renderer class.
 
 If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
 
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22714946-blue.svg)](https://doi.org/10.5281/zenodo.22714946)
+[![DOI](https://zenodo.org/badge/1366573933.svg)](https://zenodo.org/badge/latestdoi/1366573933)
 
 You can also use the metadata provided in [`CITATION.cff`](CITATION.cff).

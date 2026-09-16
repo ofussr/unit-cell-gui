@@ -8,10 +8,16 @@ from .hatching import (
     quadrilateral_hatch_line_count,
 )
 from .models import Atom, AtomComponent, DisplayOptions, Polyhedron, Scene, StyleOverrides
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 
 def __getattr__(name):
+    if name in {"configure_qt_opengl", "preferred_surface_format"}:
+        from .qt_config import configure_qt_opengl, preferred_surface_format
+        return {
+            "configure_qt_opengl": configure_qt_opengl,
+            "preferred_surface_format": preferred_surface_format,
+        }[name]
     if name in {"CrystalCanvas", "UnitCellViewer", "OpenGLUnitCellViewer", "screen_drag_orientation"}:
         from .viewer import CrystalCanvas, UnitCellViewer, screen_drag_orientation
         if name == "OpenGLUnitCellViewer":
@@ -34,10 +40,12 @@ __all__ = [
     "Scene",
     "StyleOverrides",
     "UnitCellViewer",
+    "configure_qt_opengl",
     "face_hatch_segments",
     "hatch_division_count",
     "occupancy_fractions",
     "propagated_hatch_directions",
     "quadrilateral_hatch_line_count",
+    "preferred_surface_format",
     "screen_drag_orientation",
 ]

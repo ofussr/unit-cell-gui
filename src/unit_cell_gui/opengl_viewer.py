@@ -75,14 +75,21 @@ from OpenGL.GL import (
     glViewport,
 )
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFontMetrics, QPainter, QPen, QPolygonF, QSurfaceFormat
+from PySide6.QtGui import QBrush, QColor, QFontMetrics, QPainter, QPen, QPolygonF
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QSizePolicy
 
 from .gl_geometry import cylinder_mesh, line_vertices, polygon_triangles, sphere_mesh
 from .hatching import hatch_division_count
 from .models import DisplayOptions, Scene, StyleOverrides
+from .qt_config import configure_qt_opengl, preferred_surface_format
 from .view_helpers import _polyhedron_hatches, screen_drag_orientation
+
+
+# ``viewer.py`` imports this module while normal hosts are still constructing
+# their application. Configure Qt here so legacy ``CrystalCanvas`` imports get
+# the safe multi-widget setup without requiring a new bootstrap call.
+configure_qt_opengl()
 
 
 # One static vertex format is shared by every buffer:
@@ -93,6 +100,8 @@ _VERTEX_STRIDE = _VERTEX_FLOATS * 4
 _ATOM_MAX_COMPONENTS = 8
 _ATOM_VERTEX_FLOATS = 3 + 3 + 3 * _ATOM_MAX_COMPONENTS + _ATOM_MAX_COMPONENTS
 _ATOM_VERTEX_STRIDE = _ATOM_VERTEX_FLOATS * 4
+
+_CELL_DASH_PATTERN = (8.0, 4.0)
 
 
 _VERTEX_SHADER = """
@@ -268,17 +277,30 @@ layout(triangle_strip, max_vertices = 4) out;
 
 in vec4 v_colour[];
 out vec4 g_colour;
+noperspective out vec2 g_line_position;
+flat out float g_line_length;
+flat out float g_half_width;
 
 uniform vec2 u_viewport;
 uniform float u_edge_width;
 uniform float u_depth_bias;
 
-void emit_edge_vertex(vec4 clip, vec2 ndc_offset, vec4 colour) {
+void emit_edge_vertex(
+    vec4 clip,
+    vec2 ndc_offset,
+    vec4 colour,
+    vec2 line_position,
+    float line_length,
+    float half_width
+) {
     vec4 shifted = clip;
     shifted.xy += ndc_offset * clip.w;
     shifted.z += u_depth_bias * clip.w;
     gl_Position = shifted;
     g_colour = colour;
+    g_line_position = line_position;
+    g_line_length = line_length;
+    g_half_width = half_width;
     EmitVertex();
 }
 
@@ -298,24 +320,41 @@ void main() {
     vec2 direction_pixels = delta_pixels / length_pixels;
     vec2 perpendicular_pixels = vec2(-direction_pixels.y, direction_pixels.x);
     float half_width = 0.5 * u_edge_width;
+    float feather = 1.25;
+    float outer_half_width = half_width + feather;
+    float outer_end_extension = half_width + feather;
 
-    // Expand by half the requested width at both ends too, so neighbouring
-    // edge quads overlap slightly instead of leaving tiny corner gaps.
+    // Expand by half the requested width at both ends so neighbouring edge
+    // quads overlap, then add a one-pixel feather for shader antialiasing.
     vec2 end_extend_ndc = vec2(
-        direction_pixels.x * half_width * 2.0 / u_viewport.x,
-        direction_pixels.y * half_width * 2.0 / u_viewport.y
+        direction_pixels.x * outer_end_extension * 2.0 / u_viewport.x,
+        direction_pixels.y * outer_end_extension * 2.0 / u_viewport.y
     );
     vec2 side_ndc = vec2(
-        perpendicular_pixels.x * half_width * 2.0 / u_viewport.x,
-        perpendicular_pixels.y * half_width * 2.0 / u_viewport.y
+        perpendicular_pixels.x * outer_half_width * 2.0 / u_viewport.x,
+        perpendicular_pixels.y * outer_half_width * 2.0 / u_viewport.y
     );
 
     vec2 start = -end_extend_ndc;
     vec2 finish = end_extend_ndc;
-    emit_edge_vertex(p0, start + side_ndc, v_colour[0]);
-    emit_edge_vertex(p0, start - side_ndc, v_colour[0]);
-    emit_edge_vertex(p1, finish + side_ndc, v_colour[1]);
-    emit_edge_vertex(p1, finish - side_ndc, v_colour[1]);
+    emit_edge_vertex(
+        p0, start + side_ndc, v_colour[0],
+        vec2(-outer_end_extension, outer_half_width), length_pixels, half_width
+    );
+    emit_edge_vertex(
+        p0, start - side_ndc, v_colour[0],
+        vec2(-outer_end_extension, -outer_half_width), length_pixels, half_width
+    );
+    emit_edge_vertex(
+        p1, finish + side_ndc, v_colour[1],
+        vec2(length_pixels + outer_end_extension, outer_half_width),
+        length_pixels, half_width
+    );
+    emit_edge_vertex(
+        p1, finish - side_ndc, v_colour[1],
+        vec2(length_pixels + outer_end_extension, -outer_half_width),
+        length_pixels, half_width
+    );
     EndPrimitive();
 }
 """
@@ -324,10 +363,23 @@ void main() {
 _EDGE_FRAGMENT_SHADER = """
 #version 330 core
 in vec4 g_colour;
+noperspective in vec2 g_line_position;
+flat in float g_line_length;
+flat in float g_half_width;
 out vec4 frag_colour;
 
 void main() {
-    frag_colour = g_colour;
+    float outside_x = max(
+        -g_half_width - g_line_position.x,
+        g_line_position.x - (g_line_length + g_half_width)
+    );
+    float outside_y = abs(g_line_position.y) - g_half_width;
+    vec2 outside = max(vec2(outside_x, outside_y), vec2(0.0));
+    float coverage = 1.0 - smoothstep(0.0, 1.25, length(outside));
+    if (coverage <= 0.0) {
+        discard;
+    }
+    frag_colour = vec4(g_colour.rgb, g_colour.a * coverage);
 }
 """
 
@@ -469,13 +521,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        fmt = QSurfaceFormat()
-        fmt.setDepthBufferSize(24)
-        fmt.setStencilBufferSize(8)
-        fmt.setSamples(4)
-        fmt.setVersion(3, 3)
-        fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
-        self.setFormat(fmt)
+        self.setFormat(preferred_surface_format())
 
         self.scene: Scene | None = None
         self.orientation = np.eye(3)
@@ -520,6 +566,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._edge_uniform_width = -1
         self._edge_uniform_depth_bias = -1
         self.opengl_error: str | None = None
+        self._cleanup_context = None
+        self._cleaning_up = False
 
         self._atom_vao = 0
         self._atom_vbo = 0
@@ -957,6 +1005,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         return int(vertices.shape[0])
 
     def initializeGL(self) -> None:
+        context = self.context()
+        if context is not None and context is not self._cleanup_context:
+            self._disconnect_context_cleanup()
+            context.aboutToBeDestroyed.connect(self._context_about_to_be_destroyed)
+            self._cleanup_context = context
+        self._reset_gpu_objects()
         try:
             self._program = _create_program()
             self._atom_program = _create_program(_ATOM_VERTEX_SHADER, _ATOM_FRAGMENT_SHADER)
@@ -1630,11 +1684,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if not self.show_bonds or not self.engraving or self._engraving_bond_count <= 0:
             return
         self._set_edge_uniforms(width_px=1.8, depth_bias=0.0)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDepthMask(GL_FALSE)
         glBindVertexArray(self._engraving_bond_vao)
         glDrawArrays(GL_LINES, 0, int(self._engraving_bond_count))
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
+        glDisable(GL_BLEND)
 
     def _draw_atom_outlines(self) -> None:
         if not self.show_atoms or self._atom_outline_count <= 0:
@@ -1642,11 +1699,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         width_px = 0.9 if self.engraving else 0.95
         bias = 2.0e-5 if self.engraving else 1.4e-5
         self._set_edge_uniforms(width_px=width_px, depth_bias=bias)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDepthMask(GL_FALSE)
         glBindVertexArray(self._atom_outline_vao)
         glDrawArrays(GL_LINES, 0, int(self._atom_outline_count))
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
+        glDisable(GL_BLEND)
 
     def _draw_atom_face_intersections(self) -> None:
         if not self.show_atoms or not self.show_polyhedra or self._intersection_count <= 0:
@@ -1656,11 +1716,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         width_px = 1.0 if self.engraving else 0.95
         bias = 7.5e-6 if self.engraving else 8.5e-6
         self._set_edge_uniforms(width_px=width_px, depth_bias=bias)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDepthMask(GL_FALSE)
         glBindVertexArray(self._intersection_vao)
         glDrawArrays(GL_LINES, 0, int(self._intersection_count))
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
+        glDisable(GL_BLEND)
 
     def _foreground_colour(self) -> QColor:
         return QColor(25, 25, 25) if self.engraving else self.palette().text().color()
@@ -1679,7 +1742,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         pen = QPen(QColor(75, 75, 75))
         pen.setWidthF(0.9)
         pen.setCosmetic(True)
-        pen.setStyle(Qt.PenStyle.DashLine)
+        pen.setStyle(Qt.PenStyle.CustomDashLine)
+        pen.setDashPattern(list(_CELL_DASH_PATTERN))
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         for first, second in self.scene.cell_edges:
@@ -1887,32 +1951,93 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             return
         super().wheelEvent(event)
 
-    def cleanup(self) -> None:
-        if not self.context() or not self.context().isValid():
+    def _disconnect_context_cleanup(self) -> None:
+        context = self._cleanup_context
+        self._cleanup_context = None
+        if context is None:
             return
-        self.makeCurrent()
         try:
-            for attribute in ("_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo", "_face_vbo", "_face_edge_vbo", "_hatch_vbo", "_atom_outline_vbo", "_intersection_vbo", "_engraving_bond_vbo"):
-                value = getattr(self, attribute)
-                if value:
-                    glDeleteBuffers(1, [value])
-                    setattr(self, attribute, 0)
-            for attribute in ("_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao", "_face_vao", "_face_edge_vao", "_hatch_vao", "_atom_outline_vao", "_intersection_vao", "_engraving_bond_vao"):
-                value = getattr(self, attribute)
-                if value:
-                    glDeleteVertexArrays(1, [value])
-                    setattr(self, attribute, 0)
-            if self._program:
-                glDeleteProgram(self._program)
-                self._program = 0
-            if self._atom_program:
-                glDeleteProgram(self._atom_program)
-                self._atom_program = 0
-            if self._edge_program:
-                glDeleteProgram(self._edge_program)
-                self._edge_program = 0
+            context.aboutToBeDestroyed.disconnect(self._context_about_to_be_destroyed)
+        except (RuntimeError, TypeError):
+            pass
+
+    def _reset_gpu_objects(self) -> None:
+        for attribute in (
+            "_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
+            "_face_vbo", "_face_edge_vbo", "_hatch_vbo",
+            "_atom_outline_vbo", "_intersection_vbo", "_engraving_bond_vbo",
+            "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
+            "_face_vao", "_face_edge_vao", "_hatch_vao",
+            "_atom_outline_vao", "_intersection_vao", "_engraving_bond_vao",
+            "_program", "_atom_program", "_edge_program",
+        ):
+            setattr(self, attribute, 0)
+        for attribute in (
+            "_uniform_projection", "_uniform_orientation", "_uniform_light",
+            "_atom_uniform_projection", "_atom_uniform_orientation",
+            "_atom_uniform_light", "_atom_uniform_engraving",
+            "_edge_uniform_projection", "_edge_uniform_orientation",
+            "_edge_uniform_viewport", "_edge_uniform_width",
+            "_edge_uniform_depth_bias",
+        ):
+            setattr(self, attribute, -1)
+        for attribute in (
+            "_atom_count", "_opaque_count", "_bond_count", "_cell_count",
+            "_face_count", "_face_edge_count", "_hatch_count",
+            "_atom_outline_count", "_intersection_count",
+            "_engraving_bond_count",
+        ):
+            setattr(self, attribute, 0)
+        self._face_ranges = []
+        self._face_edge_ranges = []
+        self._gpu_dirty = True
+        self._atom_dirty = True
+        self._bond_dirty = True
+        self._intersection_dirty = True
+        self._hatch_dirty = True
+        self._atom_outline_dirty = True
+
+    def _context_about_to_be_destroyed(self) -> None:
+        self.cleanup()
+
+    def cleanup(self) -> None:
+        if self._cleaning_up:
+            return
+        self._cleaning_up = True
+        context = self.context()
+        can_delete = context is not None and context.isValid()
+        if can_delete:
+            self.makeCurrent()
+        try:
+            if can_delete:
+                for attribute in (
+                    "_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
+                    "_face_vbo", "_face_edge_vbo", "_hatch_vbo",
+                    "_atom_outline_vbo", "_intersection_vbo",
+                    "_engraving_bond_vbo",
+                ):
+                    value = getattr(self, attribute)
+                    if value:
+                        glDeleteBuffers(1, [value])
+                for attribute in (
+                    "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
+                    "_face_vao", "_face_edge_vao", "_hatch_vao",
+                    "_atom_outline_vao", "_intersection_vao",
+                    "_engraving_bond_vao",
+                ):
+                    value = getattr(self, attribute)
+                    if value:
+                        glDeleteVertexArrays(1, [value])
+                for attribute in ("_program", "_atom_program", "_edge_program"):
+                    value = getattr(self, attribute)
+                    if value:
+                        glDeleteProgram(value)
         finally:
-            self.doneCurrent()
+            if can_delete:
+                self.doneCurrent()
+            self._disconnect_context_cleanup()
+            self._reset_gpu_objects()
+            self._cleaning_up = False
 
     def closeEvent(self, event) -> None:
         self.cleanup()

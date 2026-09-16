@@ -62,7 +62,7 @@ Notes
 -----
 
 The version ranges above describe the direct runtime dependencies declared by
-unit-cell-gui 0.2.0. Transitive dependencies may vary depending on the
+unit-cell-gui 0.2.1. Transitive dependencies may vary depending on the
 platform and the versions selected by the Python package installer.
 
 This file does not replace the license files supplied by third-party packages.
