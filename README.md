@@ -128,6 +128,9 @@ style-override, orientation-synchronization and interaction calls remain the
 same. `OpenGLUnitCellViewer` remains available as an explicit name and refers
 to the same renderer class.
 
+## Used in
+
+`unit-cell-gui` is used as the crystal-structure viewer in [XRD Combine](https://github.com/ofussr/XRD-Combine), where it is integrated with CIF processing, diffraction tools, and synchronized crystallographic views.
 
 ## How to cite
 
