@@ -2,6 +2,6 @@ include CHANGELOG.md
 include CITATION.cff
 include LICENSE
 include README.md
-include RELEASE_NOTES_0.2.1.md
+include RELEASE_NOTES_0.2.2.md
 include THIRD_PARTY_NOTICES.txt
 recursive-include tests *.py

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.2 - 2026-10-01
+
+### Fixed
+
+- Individual polyhedron visibility changes now filter resident face, edge and
+  atom/face-intersection ranges at draw time, instead of rebuilding their
+  geometry and re-uploading the complete buffers.
+- Apply the same visibility selection to opaque and transparent faces, edges,
+  hatching and intersection contours, including multiple polyhedra sharing a
+  site key.
+
+### Performance
+
+- Cache engraving hatching separately for each polyhedron. Reuse GPU buffers
+  when the view and effective division count are unchanged; rebuild only the
+  affected polyhedra when visible depth extrema alter the density.
+- Preserve the original hatching algorithms and density/GRIP normalization
+  over visible polyhedra. Keep at most four CPU density variants per polyhedron
+  for the current view; discard them when the view or scene changes.
+- Vectorize finite-face clipping of sphere/face section segments while keeping
+  the original 160-sample circles and boundary tolerance.
+- Defer intersection and hatching preparation until their layers are visible.
+- Release per-polyhedron hatching GPU resources on scene replacement/clearing
+  and context cleanup; recreate them when needed.
+
+### Compatibility
+
+- Keep all public scene models, display options, style overrides, viewer aliases
+  and orientation/interaction signals unchanged. Hosts using the existing
+  0.2.x API do not need integration changes.
+
 ## 0.2.1 - 2026-09-15
 
 ### Fixed

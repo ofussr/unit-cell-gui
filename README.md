@@ -119,6 +119,24 @@ Per-position colours, visibility and opaque-polyhedron selections are replaced
 atomically with `viewer.set_style_overrides(StyleOverrides(...))`. The widget
 copies these mappings, so the host can keep its own independent UI state.
 
+## Visibility and rendering caches
+
+Both global and per-site polyhedron visibility filter already prepared geometry
+at draw time. Faces, edges and atom/face intersection contours remain in GPU
+buffers when a site is hidden or shown. This avoids rebuilding the full
+polyhedron layer for each individual visibility change.
+
+Engraving hatching is cached per polyhedron. Its density still follows the
+depth range of the visible polyhedra: hiding the nearest or farthest object can
+change other objects' effective division counts. Only affected hatch buffers
+are updated. Rotation, zoom, panning and window-size changes keep the original
+view-dependent hatching behaviour. CPU density variants are bounded and are
+discarded when the view or scene changes.
+
+Intersection contours and hatching are prepared when their layers are first
+needed. The initial preparation still has a cost; subsequent site visibility
+changes reuse the prepared data.
+
 
 ## Renderer compatibility
 

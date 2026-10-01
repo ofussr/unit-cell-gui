@@ -3,10 +3,9 @@ CITATION.cff
 LICENSE
 MANIFEST.in
 README.md
-RELEASE_NOTES_0.2.1.md
+RELEASE_NOTES_0.2.2.md
 THIRD_PARTY_NOTICES.txt
 pyproject.toml
-setup.cfg
 src/unit_cell_gui/__init__.py
 src/unit_cell_gui/gl_geometry.py
 src/unit_cell_gui/hatching.py
@@ -25,3 +24,4 @@ src/unit_cell_gui.egg-info/top_level.txt
 tests/test_gl_geometry.py
 tests/test_render_geometry.py
 tests/test_unit_cell_gui.py
+tests/test_visibility_cache.py

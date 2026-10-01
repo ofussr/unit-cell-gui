@@ -1,9 +1,8 @@
 """Cached OpenGL 3.3 unit-cell renderer.
 
-Geometry is generated only when the scene/style changes and uploaded to static
-GPU buffers.  Interactive rotation changes only one orientation uniform; no
-sphere/cylinder meshes are regenerated and no vertex buffers are re-uploaded
-while the user drags the structure.
+Static meshes stay in GPU buffers when visibility or orientation changes.
+View-dependent hatching and atom silhouettes are updated separately; hatching
+is cached per polyhedron and density, without rebuilding the static scene.
 """
 
 from __future__ import annotations
@@ -11,7 +10,8 @@ from __future__ import annotations
 import ctypes
 import math
 import time
-from collections import deque
+from collections import OrderedDict, deque
+from dataclasses import dataclass
 
 import numpy as np
 from OpenGL.GL import (
@@ -102,6 +102,28 @@ _ATOM_VERTEX_FLOATS = 3 + 3 + 3 * _ATOM_MAX_COMPONENTS + _ATOM_MAX_COMPONENTS
 _ATOM_VERTEX_STRIDE = _ATOM_VERTEX_FLOATS * 4
 
 _CELL_DASH_PATTERN = (8.0, 4.0)
+
+
+@dataclass(frozen=True)
+class _PolyhedronRange:
+    site_key: str
+    first: int
+    count: int
+    center: np.ndarray | None = None
+
+
+@dataclass
+class _HatchBuffer:
+    vao: int
+    vbo: int
+    count: int = 0
+    geometry_key: tuple | None = None
+
+
+# Keep a few depth-density variants for each polyhedron at the current view.
+# Hiding a depth-extreme object and showing it again can reuse both variants,
+# without retaining an unbounded history of rotations or slider positions.
+_HATCH_VARIANTS_PER_POLYHEDRON = 4
 
 
 _VERTEX_SHADER = """
@@ -575,6 +597,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._opaque_vao = 0
         self._opaque_vbo = 0
         self._opaque_count = 0
+        self._opaque_ranges: list[_PolyhedronRange] = []
         self._bond_vao = 0
         self._bond_vbo = 0
         self._bond_count = 0
@@ -585,13 +608,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._face_vao = 0
         self._face_vbo = 0
         self._face_count = 0
-        self._face_ranges: list[tuple[np.ndarray, int, int]] = []
+        self._face_ranges: list[_PolyhedronRange] = []
         self._face_edge_vao = 0
         self._face_edge_vbo = 0
         self._face_edge_count = 0
-        self._face_edge_ranges: list[tuple[np.ndarray, int, int]] = []
-        self._hatch_vao = 0
-        self._hatch_vbo = 0
+        self._face_edge_ranges: list[_PolyhedronRange] = []
+        self._hatch_buffers: dict[int, _HatchBuffer] = {}
+        self._hatch_draw_indices: tuple[int, ...] = ()
+        self._hatch_buffers_need_clear = False
         self._hatch_count = 0
         self._hatch_dirty = True
         self._atom_outline_vao = 0
@@ -601,6 +625,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._intersection_vao = 0
         self._intersection_vbo = 0
         self._intersection_count = 0
+        self._intersection_ranges: list[_PolyhedronRange] = []
         self._engraving_bond_vao = 0
         self._engraving_bond_vbo = 0
         self._engraving_bond_count = 0
@@ -615,6 +640,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._atom_mesh_cache: dict[tuple[int, float], tuple[np.ndarray, np.ndarray]] = {}
         self._bond_mesh_cache: dict[tuple[int, float], tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]] = {}
         self._poly_face_mesh_cache: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+        self._hatch_mesh_cache: dict[int, OrderedDict[int, np.ndarray]] = {}
+        self._hatch_view_key: tuple | None = None
 
         self._show_fps = False
         self._frame_times: deque[float] = deque(maxlen=90)
@@ -647,12 +674,15 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if not atoms_only:
             self._bond_mesh_cache.clear()
             self._poly_face_mesh_cache.clear()
+            self._hatch_mesh_cache.clear()
+            self._hatch_view_key = None
 
     def set_scene(self, scene: Scene | None, *, reset_camera: bool = True) -> None:
         if scene is not None and not isinstance(scene, Scene):
             raise TypeError("scene must be a unit_cell_gui.Scene or None")
         self.scene = scene
         self._clear_mesh_caches()
+        self._hatch_buffers_need_clear = True
         if reset_camera:
             self.zoom = 1.0
             self.pan_x = 0.0
@@ -749,10 +779,15 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._atom_dirty = True
             self._bond_dirty = True
             self._atom_outline_dirty = True
-        if atom_visibility_changed or poly_visibility_changed:
+        if atom_visibility_changed:
             self._intersection_dirty = True
-        if poly_visibility_changed or poly_style_changed:
+        if poly_style_changed:
             self._gpu_dirty = True
+        if poly_visibility_changed:
+            # Face/edge/intersection buffers contain all polyhedra. Visibility
+            # is applied at draw time, without changing their vertex data.
+            # Hatching still needs a cheap density check: the visible depth
+            # extrema may have changed, but unchanged meshes stay cached.
             self._hatch_dirty = True
         self.update()
 
@@ -1025,7 +1060,6 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._cell_vao, self._cell_vbo = self._create_buffer()
             self._face_vao, self._face_vbo = self._create_buffer()
             self._face_edge_vao, self._face_edge_vbo = self._create_buffer()
-            self._hatch_vao, self._hatch_vbo = self._create_buffer()
             self._atom_outline_vao, self._atom_outline_vbo = self._create_buffer()
             self._intersection_vao, self._intersection_vbo = self._create_buffer()
             self._engraving_bond_vao, self._engraving_bond_vbo = self._create_buffer()
@@ -1129,19 +1163,20 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 blocks.append(_vertex_block(positions, normals, colour, lit=True))
         return _combine_blocks(blocks)
 
-    def _build_static_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[tuple[np.ndarray, int, int]], np.ndarray, list[tuple[np.ndarray, int, int]]]:
+    def _build_static_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[_PolyhedronRange], np.ndarray, list[_PolyhedronRange], list[_PolyhedronRange]]:
         if self.scene is None:
             empty = np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
             atom_empty = np.empty((0, _ATOM_VERTEX_FLOATS), dtype=np.float32)
-            return atom_empty, empty, empty.copy(), empty.copy(), [], empty.copy(), []
+            return atom_empty, empty, empty.copy(), empty.copy(), [], empty.copy(), [], []
 
         atom_blocks: list[np.ndarray] = []
         opaque_blocks: list[np.ndarray] = []
+        opaque_ranges: list[_PolyhedronRange] = []
         cell_blocks: list[np.ndarray] = []
         face_blocks: list[np.ndarray] = []
-        face_ranges: list[tuple[np.ndarray, int, int]] = []
+        face_ranges: list[_PolyhedronRange] = []
         face_edge_blocks: list[np.ndarray] = []
-        face_edge_ranges: list[tuple[np.ndarray, int, int]] = []
+        face_edge_ranges: list[_PolyhedronRange] = []
 
         if self.show_cell:
             colour = QColor(90, 90, 90) if not self.engraving else QColor(60, 60, 60)
@@ -1153,12 +1188,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 cell_blocks.append(_vertex_block(positions, normals, colour, lit=False))
 
         if self.scene.polyhedra:
+            opaque_offset = 0
             transparent_offset = 0
             transparent_edge_offset = 0
             edge_lift = max(1.0e-4, 8.0e-4 * float(self.scene.base_radius))
             for poly_index, polyhedron in enumerate(self.scene.polyhedra):
-                if not self.polyhedron_site_visibility.get(polyhedron.site_key, True):
-                    continue
+                opaque_first = opaque_offset
                 colour = QColor(
                     self.polyhedron_site_colours.get(
                         polyhedron.site_key,
@@ -1183,9 +1218,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     block = _vertex_block(positions, normals, colour, alpha=alpha, lit=False)
                     if opaque:
                         opaque_blocks.append(block)
+                        opaque_offset += block.shape[0]
                     else:
                         face_blocks.append(block)
-                        face_ranges.append((world.mean(axis=0), transparent_offset, block.shape[0]))
+                        face_ranges.append(_PolyhedronRange(
+                            polyhedron.site_key, transparent_offset, block.shape[0], world.mean(axis=0)
+                        ))
                         transparent_offset += block.shape[0]
 
                     # Collect one outward normal per adjacent face.  A shared edge
@@ -1229,8 +1267,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     )
                     face_edge_blocks.append(edge_block)
                     midpoint = 0.5 * (first_point + second_point)
-                    face_edge_ranges.append((midpoint, transparent_edge_offset, edge_block.shape[0]))
+                    face_edge_ranges.append(_PolyhedronRange(
+                        polyhedron.site_key, transparent_edge_offset, edge_block.shape[0], midpoint
+                    ))
                     transparent_edge_offset += edge_block.shape[0]
+                if opaque_offset > opaque_first:
+                    opaque_ranges.append(_PolyhedronRange(
+                        polyhedron.site_key, opaque_first, opaque_offset - opaque_first
+                    ))
 
         return (
             _combine_atom_blocks(atom_blocks),
@@ -1240,91 +1284,121 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             face_ranges,
             _combine_blocks(face_edge_blocks),
             face_edge_ranges,
+            opaque_ranges,
         )
 
-    def _build_hatch_geometry(self) -> np.ndarray:
+    def _hatch_plan(self) -> list[tuple[int, int]]:
+        """Keep the original density normalization over visible polyhedra."""
         if self.scene is None or not self.engraving or not self.hatching:
-            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
-
-        selected: list[tuple[object, np.ndarray]] = []
-        for polyhedron in self.scene.polyhedra:
-            if not self.polyhedron_site_visibility.get(polyhedron.site_key, True):
-                continue
-            center_camera = self.orientation @ np.asarray(polyhedron.center, dtype=float)
-            selected.append((polyhedron, center_camera))
+            return []
+        selected = [
+            (index, float((self.orientation @ polyhedron.center)[2]))
+            for index, polyhedron in enumerate(self.scene.polyhedra)
+            if self.polyhedron_site_visibility.get(polyhedron.site_key, True)
+        ]
         if not selected:
-            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
-
-        depths = [float(center[2]) for _polyhedron, center in selected]
+            return []
+        depths = [depth for _index, depth in selected]
         minimum, maximum = min(depths), max(depths)
+        extent = maximum - minimum
+        return [
+            (index, hatch_division_count(
+                0.5 if abs(extent) < 1e-12 else (maximum - depth) / extent,
+                self.hatch_density, self.hatch_grip,
+            ))
+            for index, depth in selected
+        ]
+
+    def _prepare_hatch_view(self) -> tuple:
+        key = (
+            np.asarray(self.orientation, dtype=float).tobytes(),
+            self.width(), self.height(), self.zoom, self.pan_x, self.pan_y,
+        )
+        if key != self._hatch_view_key:
+            self._hatch_mesh_cache.clear()
+            self._hatch_view_key = key
+        return key
+
+    def _cached_polyhedron_hatches(self, poly_index: int, division_count: int) -> np.ndarray:
+        variants = self._hatch_mesh_cache.setdefault(poly_index, OrderedDict())
+        if division_count not in variants:
+            variants[division_count] = self._build_polyhedron_hatch_geometry(poly_index, division_count)
+            if len(variants) > _HATCH_VARIANTS_PER_POLYHEDRON:
+                variants.popitem(last=False)
+        variants.move_to_end(division_count)
+        return variants[division_count]
+
+    def _build_hatch_geometry(self) -> np.ndarray:
+        """CPU representation, also useful without an initialized GL context."""
+        self._prepare_hatch_view()
+        return _combine_blocks([
+            self._cached_polyhedron_hatches(index, divisions)
+            for index, divisions in self._hatch_plan()
+        ])
+
+    def _build_polyhedron_hatch_geometry(self, poly_index: int, division_count: int) -> np.ndarray:
+        polyhedron = self.scene.polyhedra[poly_index]
         hatch_blocks: list[np.ndarray] = []
         inverse_orientation = np.linalg.inv(np.asarray(self.orientation, dtype=float))
         hatch_colour = QColor(30, 30, 30)
         hatch_lift = max(1.0e-4, 1.0e-3 * float(self.scene.base_radius))
-
-        for polyhedron, center_camera in selected:
-            vertices_camera = np.asarray(
-                [self.orientation @ np.asarray(vertex, dtype=float) for vertex in polyhedron.vertices],
-                dtype=float,
-            )
-            projected = [self._project_camera_point(vertex) for vertex in vertices_camera]
-            normals: dict[int, np.ndarray] = {}
-            visible_faces: list[int] = []
-            for face_index, face in enumerate(polyhedron.faces):
-                face_vertices = vertices_camera[list(face)]
-                normal = np.cross(face_vertices[1] - face_vertices[0], face_vertices[2] - face_vertices[0])
-                length = float(np.linalg.norm(normal))
-                if length < 1e-12:
-                    continue
-                normal /= length
-                normals[face_index] = normal
-                if float(normal[2]) > 1e-9:
-                    visible_faces.append(face_index)
-            if not visible_faces:
+        vertices_camera = np.asarray(
+            [self.orientation @ np.asarray(vertex, dtype=float) for vertex in polyhedron.vertices],
+            dtype=float,
+        )
+        projected = [self._project_camera_point(vertex) for vertex in vertices_camera]
+        normals: dict[int, np.ndarray] = {}
+        visible_faces: list[int] = []
+        for face_index, face in enumerate(polyhedron.faces):
+            face_vertices = vertices_camera[list(face)]
+            normal = np.cross(face_vertices[1] - face_vertices[0], face_vertices[2] - face_vertices[0])
+            length = float(np.linalg.norm(normal))
+            if length < 1e-12:
                 continue
-            hatch_far = (
-                0.5
-                if abs(maximum - minimum) < 1e-12
-                else (maximum - float(center_camera[2])) / (maximum - minimum)
-            )
-            hatches = _polyhedron_hatches(
-                polyhedron,
-                vertices_camera,
-                projected,
-                visible_faces,
-                normals,
-                hatch_division_count(hatch_far, self.hatch_density, self.hatch_grip),
-                self._project_camera_point,
-            )
-            for face_index, segments in hatches.items():
-                if not segments:
+            normal /= length
+            normals[face_index] = normal
+            if float(normal[2]) > 1e-9:
+                visible_faces.append(face_index)
+        if not visible_faces:
+            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
+        hatches = _polyhedron_hatches(
+            polyhedron,
+            vertices_camera,
+            projected,
+            visible_faces,
+            normals,
+            division_count,
+            self._project_camera_point,
+        )
+        for face_index, segments in hatches.items():
+            if not segments:
+                continue
+            face = polyhedron.faces[face_index]
+            plane_point = vertices_camera[int(face[0])]
+            plane_normal = normals[face_index]
+            hatch_offset = plane_normal * hatch_lift
+            edge_segments: list[np.ndarray] = []
+            edge_normals: list[np.ndarray] = []
+            for first, second in segments:
+                first_camera = self._unproject_to_face(first, plane_point, plane_normal)
+                second_camera = self._unproject_to_face(second, plane_point, plane_normal)
+                if first_camera is None or second_camera is None:
                     continue
-                face = polyhedron.faces[face_index]
-                plane_point = vertices_camera[int(face[0])]
-                plane_normal = normals[face_index]
-                hatch_offset = plane_normal * hatch_lift
-                edge_segments: list[np.ndarray] = []
-                edge_normals: list[np.ndarray] = []
-                for first, second in segments:
-                    first_camera = self._unproject_to_face(first, plane_point, plane_normal)
-                    second_camera = self._unproject_to_face(second, plane_point, plane_normal)
-                    if first_camera is None or second_camera is None:
-                        continue
-                    first_world = inverse_orientation @ (first_camera + hatch_offset)
-                    second_world = inverse_orientation @ (second_camera + hatch_offset)
-                    positions, vertex_normals = line_vertices(first_world, second_world)
-                    edge_segments.append(positions)
-                    edge_normals.append(vertex_normals)
-                if edge_segments:
-                    hatch_blocks.append(
-                        _vertex_block(
-                            np.concatenate(edge_segments, axis=0),
-                            np.concatenate(edge_normals, axis=0),
-                            hatch_colour,
-                            alpha=1.0,
-                            lit=False,
-                        )
+                first_world = inverse_orientation @ (first_camera + hatch_offset)
+                second_world = inverse_orientation @ (second_camera + hatch_offset)
+                positions, vertex_normals = line_vertices(first_world, second_world)
+                edge_segments.append(positions)
+                edge_normals.append(vertex_normals)
+            if edge_segments:
+                hatch_blocks.append(
+                    _vertex_block(
+                        np.concatenate(edge_segments, axis=0),
+                        np.concatenate(edge_normals, axis=0),
+                        hatch_colour,
+                        alpha=1.0,
+                        lit=False,
                     )
+                )
         return _combine_blocks(hatch_blocks)
 
     def _build_engraving_bond_geometry(self) -> np.ndarray:
@@ -1415,7 +1489,20 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             return True
         return all(value >= 0.0 for value in signs) or all(value <= 0.0 for value in signs)
 
-    def _build_atom_face_intersection_geometry(self) -> np.ndarray:
+    @staticmethod
+    def _points_in_convex_face(points: np.ndarray, polygon: np.ndarray, normal: np.ndarray) -> np.ndarray:
+        """The same finite-face test for all section-segment midpoints at once."""
+        poly = np.asarray(polygon, dtype=float).reshape(-1, 3)
+        points = np.asarray(points, dtype=float).reshape(-1, 3)
+        if len(poly) < 3:
+            return np.zeros(len(points), dtype=bool)
+        scale = max(1.0, float(np.max(np.linalg.norm(poly - poly[0], axis=1))))
+        tolerance = 1.0e-9 * scale
+        edges = np.roll(poly, -1, axis=0) - poly
+        sides = np.cross(edges[None, :, :], points[:, None, :] - poly[None, :, :]) @ normal
+        return np.all(sides >= -tolerance, axis=1) | np.all(sides <= tolerance, axis=1)
+
+    def _build_atom_face_intersection_geometry(self) -> tuple[np.ndarray, list[_PolyhedronRange]]:
         """Build the actual sphere/face intersection curves.
 
         Each polyhedron face is a finite planar polygon.  A sphere/plane
@@ -1424,10 +1511,15 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         normal OpenGL depth test.
         """
         if self.scene is None:
-            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
+            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32), []
 
         blocks: list[np.ndarray] = []
+        ranges: list[_PolyhedronRange] = []
+        offset = 0
         samples = 160
+        angles = [2.0 * math.pi * index / samples for index in range(samples)]
+        circle_cos = np.asarray([math.cos(angle) for angle in angles])[:, None]
+        circle_sin = np.asarray([math.sin(angle) for angle in angles])[:, None]
         intersection_colour = QColor(20, 20, 20)
 
         visible_atoms = [
@@ -1442,13 +1534,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             and (self.show_external_atoms or not atom.external)
         ]
         if not visible_atoms:
-            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
+            return np.empty((0, _VERTEX_FLOATS), dtype=np.float32), []
         atom_centres = np.asarray([item[1] for item in visible_atoms], dtype=float)
         atom_radii = np.asarray([item[2] for item in visible_atoms], dtype=float)
 
         for polyhedron in self.scene.polyhedra:
-            if not self.polyhedron_site_visibility.get(polyhedron.site_key, True):
-                continue
+            poly_first = offset
             vertices = np.asarray(polyhedron.vertices, dtype=float)
             poly_center = np.asarray(polyhedron.center, dtype=float)
             for face in polyhedron.faces:
@@ -1496,41 +1587,28 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     circle_radius = math.sqrt(circle_radius_sq)
                     circle_center = atom_center - signed_distance * normal
 
-                    points = [
-                        circle_center
-                        + circle_radius
-                        * (
-                            math.cos(2.0 * math.pi * index / samples) * u
-                            + math.sin(2.0 * math.pi * index / samples) * v
+                    points = circle_center + circle_radius * (circle_cos * u + circle_sin * v)
+                    following = np.roll(points, -1, axis=0)
+                    inside = self._points_in_convex_face(0.5 * (points + following), polygon, normal)
+                    if np.any(inside):
+                        positions = np.stack((points[inside], following[inside]), axis=1).reshape(-1, 3)
+                        block = _vertex_block(
+                            positions,
+                            np.zeros_like(positions),
+                            colour,
+                            lit=False,
                         )
-                        for index in range(samples)
-                    ]
+                        blocks.append(block)
+                        offset += len(block)
+            if offset > poly_first:
+                ranges.append(_PolyhedronRange(polyhedron.site_key, poly_first, offset - poly_first))
 
-                    positions: list[np.ndarray] = []
-                    normals: list[np.ndarray] = []
-                    for index, first in enumerate(points):
-                        second = points[(index + 1) % samples]
-                        midpoint = 0.5 * (first + second)
-                        if not self._point_in_convex_face(midpoint, polygon, normal):
-                            continue
-                        segment_positions, segment_normals = line_vertices(first, second)
-                        positions.append(segment_positions)
-                        normals.append(segment_normals)
-                    if positions:
-                        blocks.append(
-                            _vertex_block(
-                                np.concatenate(positions, axis=0),
-                                np.concatenate(normals, axis=0),
-                                colour,
-                                lit=False,
-                            )
-                        )
-
-        return _combine_blocks(blocks)
+        return _combine_blocks(blocks), ranges
 
     def _rebuild_gpu_cache(self) -> None:
-        _atoms, opaque, cell, faces, ranges, face_edges, face_edge_ranges = self._build_static_geometry()
+        _atoms, opaque, cell, faces, ranges, face_edges, face_edge_ranges, opaque_ranges = self._build_static_geometry()
         self._opaque_count = self._upload_static(self._opaque_vao, self._opaque_vbo, opaque)
+        self._opaque_ranges = opaque_ranges
         self._cell_count = self._upload_static(self._cell_vao, self._cell_vbo, cell)
         self._face_count = self._upload_static(self._face_vao, self._face_vbo, faces)
         self._face_ranges = ranges
@@ -1553,18 +1631,41 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._atom_dirty = False
 
     def _rebuild_intersection_cache(self) -> None:
-        intersections = self._build_atom_face_intersection_geometry()
+        intersections, ranges = self._build_atom_face_intersection_geometry()
         self._intersection_count = self._upload_static(
             self._intersection_vao, self._intersection_vbo, intersections
         )
+        self._intersection_ranges = ranges
         self._intersection_dirty = False
 
     def _rebuild_hatch_cache(self) -> None:
         if not self.context() or not self.context().isValid():
             return
-        hatches = self._build_hatch_geometry()
-        self._hatch_count = self._upload_static(self._hatch_vao, self._hatch_vbo, hatches)
+        view_key = self._prepare_hatch_view()
+        plan = self._hatch_plan()
+        for index, divisions in plan:
+            buffer = self._hatch_buffers.get(index)
+            if buffer is None:
+                buffer = _HatchBuffer(*self._create_buffer())
+                self._hatch_buffers[index] = buffer
+            geometry_key = (view_key, divisions)
+            if buffer.geometry_key != geometry_key:
+                hatches = self._cached_polyhedron_hatches(index, divisions)
+                buffer.count = self._upload_static(buffer.vao, buffer.vbo, hatches)
+                buffer.geometry_key = geometry_key
+        self._hatch_draw_indices = tuple(index for index, _divisions in plan)
+        self._hatch_count = sum(self._hatch_buffers[index].count for index in self._hatch_draw_indices)
         self._hatch_dirty = False
+
+    def _delete_hatch_buffers(self) -> None:
+        """Called only while the widget's OpenGL context is current."""
+        for buffer in self._hatch_buffers.values():
+            glDeleteBuffers(1, [buffer.vbo])
+            glDeleteVertexArrays(1, [buffer.vao])
+        self._hatch_buffers.clear()
+        self._hatch_draw_indices = ()
+        self._hatch_count = 0
+        self._hatch_buffers_need_clear = False
 
     def _rebuild_atom_outline_cache(self) -> None:
         if not self.context() or not self.context().isValid():
@@ -1624,13 +1725,24 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glDrawArrays(mode, 0, count)
         glBindVertexArray(0)
 
-    def _ordered_face_ranges(self) -> list[tuple[np.ndarray, int, int]]:
+    def _visible_polyhedron_ranges(self, ranges: list[_PolyhedronRange]) -> list[_PolyhedronRange]:
+        return [item for item in ranges if self.polyhedron_site_visibility.get(item.site_key, True)]
+
+    def _draw_opaque_polyhedra(self) -> None:
+        if not self.show_polyhedra or self._opaque_count <= 0:
+            return
+        glBindVertexArray(self._opaque_vao)
+        for item in self._visible_polyhedron_ranges(self._opaque_ranges):
+            glDrawArrays(GL_TRIANGLES, item.first, item.count)
+        glBindVertexArray(0)
+
+    def _ordered_face_ranges(self) -> list[_PolyhedronRange]:
         if not self._face_ranges:
             return []
         orientation = np.asarray(self.orientation, dtype=float)
         return sorted(
-            self._face_ranges,
-            key=lambda item: float((orientation @ item[0])[2]),
+            self._visible_polyhedron_ranges(self._face_ranges),
+            key=lambda item: float((orientation @ item.center)[2]),
         )
 
     def _draw_transparent_faces(self) -> None:
@@ -1642,8 +1754,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBindVertexArray(self._face_vao)
         # Only tiny face-centre transforms and draw calls remain during rotation;
         # vertex data itself stays resident on the GPU.
-        for _centre, first, count in self._ordered_face_ranges():
-            glDrawArrays(GL_TRIANGLES, int(first), int(count))
+        for item in self._ordered_face_ranges():
+            glDrawArrays(GL_TRIANGLES, item.first, item.count)
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
         glDisable(GL_BLEND)
@@ -1658,11 +1770,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBindVertexArray(self._face_edge_vao)
         orientation = np.asarray(self.orientation, dtype=float)
         ordered = sorted(
-            self._face_edge_ranges,
-            key=lambda item: float((orientation @ item[0])[2]),
+            self._visible_polyhedron_ranges(self._face_edge_ranges),
+            key=lambda item: float((orientation @ item.center)[2]),
         )
-        for _centre, first, count in ordered:
-            glDrawArrays(GL_LINES, int(first), int(count))
+        for item in ordered:
+            glDrawArrays(GL_LINES, item.first, item.count)
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
         glDisable(GL_BLEND)
@@ -1674,8 +1786,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDepthMask(GL_FALSE)
-        glBindVertexArray(self._hatch_vao)
-        glDrawArrays(GL_LINES, 0, int(self._hatch_count))
+        for index in self._hatch_draw_indices:
+            buffer = self._hatch_buffers[index]
+            if buffer.count:
+                glBindVertexArray(buffer.vao)
+                glDrawArrays(GL_LINES, 0, buffer.count)
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
         glDisable(GL_BLEND)
@@ -1720,7 +1835,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glDepthMask(GL_FALSE)
         glBindVertexArray(self._intersection_vao)
-        glDrawArrays(GL_LINES, 0, int(self._intersection_count))
+        for item in self._visible_polyhedron_ranges(self._intersection_ranges):
+            glDrawArrays(GL_LINES, item.first, item.count)
         glBindVertexArray(0)
         glDepthMask(GL_TRUE)
         glDisable(GL_BLEND)
@@ -1855,6 +1971,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._restore_render_state()
         glClearColor(background.redF(), background.greenF(), background.blueF(), 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        if self.opengl_error is None and self._program and self._hatch_buffers_need_clear:
+            self._delete_hatch_buffers()
         if self.opengl_error is None and self.scene is not None and self._program:
             if self._gpu_dirty:
                 self._rebuild_gpu_cache()
@@ -1862,15 +1980,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 self._rebuild_atom_cache()
             if self._bond_dirty:
                 self._rebuild_bond_cache()
-            if self._intersection_dirty:
+            if self._intersection_dirty and self.show_atoms and self.show_polyhedra:
                 self._rebuild_intersection_cache()
-            if self._hatch_dirty:
+            if self._hatch_dirty and self.show_polyhedra and self.engraving and self.hatching:
                 self._rebuild_hatch_cache()
             if self._atom_outline_dirty:
                 self._rebuild_atom_outline_cache()
             self._set_frame_uniforms()
-            if self.show_polyhedra:
-                self._draw_buffer(self._opaque_vao, self._opaque_count, GL_TRIANGLES)
+            self._draw_opaque_polyhedra()
             if self.show_bonds and not self.engraving:
                 self._draw_buffer(self._bond_vao, self._bond_count, GL_TRIANGLES)
             if self.show_atoms and self._atom_count > 0:
@@ -1964,10 +2081,10 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def _reset_gpu_objects(self) -> None:
         for attribute in (
             "_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
-            "_face_vbo", "_face_edge_vbo", "_hatch_vbo",
+            "_face_vbo", "_face_edge_vbo",
             "_atom_outline_vbo", "_intersection_vbo", "_engraving_bond_vbo",
             "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
-            "_face_vao", "_face_edge_vao", "_hatch_vao",
+            "_face_vao", "_face_edge_vao",
             "_atom_outline_vao", "_intersection_vao", "_engraving_bond_vao",
             "_program", "_atom_program", "_edge_program",
         ):
@@ -1990,6 +2107,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             setattr(self, attribute, 0)
         self._face_ranges = []
         self._face_edge_ranges = []
+        self._opaque_ranges = []
+        self._intersection_ranges = []
+        self._hatch_buffers = {}
+        self._hatch_draw_indices = ()
+        self._hatch_buffers_need_clear = False
         self._gpu_dirty = True
         self._atom_dirty = True
         self._bond_dirty = True
@@ -2010,9 +2132,10 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self.makeCurrent()
         try:
             if can_delete:
+                self._delete_hatch_buffers()
                 for attribute in (
                     "_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
-                    "_face_vbo", "_face_edge_vbo", "_hatch_vbo",
+                    "_face_vbo", "_face_edge_vbo",
                     "_atom_outline_vbo", "_intersection_vbo",
                     "_engraving_bond_vbo",
                 ):
@@ -2021,7 +2144,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                         glDeleteBuffers(1, [value])
                 for attribute in (
                     "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
-                    "_face_vao", "_face_edge_vao", "_hatch_vao",
+                    "_face_vao", "_face_edge_vao",
                     "_atom_outline_vao", "_intersection_vao",
                     "_engraving_bond_vao",
                 ):
