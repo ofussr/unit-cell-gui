@@ -119,6 +119,25 @@ Per-position colours, visibility and opaque-polyhedron selections are replaced
 atomically with `viewer.set_style_overrides(StyleOverrides(...))`. The widget
 copies these mappings, so the host can keep its own independent UI state.
 
+## Atom instancing
+
+Atoms share one indexed sphere mesh with the same 16-by-24 tessellation as
+previous releases. An OpenGL instance buffer stores each visible atom's
+Cartesian centre, radius, eight RGB occupancy colours and cumulative occupancy
+thresholds once, instead of repeating them for every triangle vertex. The atom
+layer uses one `glDrawElementsInstanced` call.
+
+The base sphere and its indices occupy 18,792 bytes per viewer; instance records
+add 144 bytes per visible atom. For 1,000 atoms, these buffers total 162,792
+bytes, compared with 328,320,000 bytes for the previous expanded atom buffer.
+This comparison excludes bonds, outlines, polyhedra and Qt/driver overhead.
+The number of sphere triangles is unchanged, so this is primarily a reduction
+in geometry preparation and buffer storage, not a frame-rate guarantee.
+
+OpenGL 3.3 core remains sufficient: the renderer uses 13 vertex attribute
+locations, within the guaranteed minimum of 16. No C++ extension, new package
+dependency or host-application API change is required.
+
 ## Visibility and rendering caches
 
 Both global and per-site polyhedron visibility filter already prepared geometry

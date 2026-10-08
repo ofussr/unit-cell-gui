@@ -21,6 +21,7 @@ from OpenGL.GL import (
     GL_COMPILE_STATUS,
     GL_DEPTH_BUFFER_BIT,
     GL_DEPTH_TEST,
+    GL_ELEMENT_ARRAY_BUFFER,
     GL_FALSE,
     GL_FLOAT,
     GL_FRAGMENT_SHADER,
@@ -34,6 +35,7 @@ from OpenGL.GL import (
     GL_STATIC_DRAW,
     GL_TRIANGLES,
     GL_TRUE,
+    GL_UNSIGNED_INT,
     GL_VERTEX_SHADER,
     glAttachShader,
     glBindBuffer,
@@ -54,6 +56,7 @@ from OpenGL.GL import (
     glDepthMask,
     glDisable,
     glDrawArrays,
+    glDrawElementsInstanced,
     glEnable,
     glEnableVertexAttribArray,
     glGenBuffers,
@@ -72,6 +75,7 @@ from OpenGL.GL import (
     glUniformMatrix4fv,
     glUseProgram,
     glVertexAttribPointer,
+    glVertexAttribDivisor,
     glViewport,
 )
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
@@ -79,7 +83,7 @@ from PySide6.QtGui import QBrush, QColor, QFontMetrics, QPainter, QPen, QPolygon
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QSizePolicy
 
-from .gl_geometry import cylinder_mesh, line_vertices, polygon_triangles, sphere_mesh
+from .gl_geometry import cylinder_mesh, indexed_sphere_mesh, line_vertices, polygon_triangles
 from .hatching import hatch_division_count
 from .models import DisplayOptions, Scene, StyleOverrides
 from .qt_config import configure_qt_opengl, preferred_surface_format
@@ -98,8 +102,11 @@ _VERTEX_FLOATS = 11
 _VERTEX_STRIDE = _VERTEX_FLOATS * 4
 
 _ATOM_MAX_COMPONENTS = 8
-_ATOM_VERTEX_FLOATS = 3 + 3 + 3 * _ATOM_MAX_COMPONENTS + _ATOM_MAX_COMPONENTS
-_ATOM_VERTEX_STRIDE = _ATOM_VERTEX_FLOATS * 4
+# The base sphere uses position.xyz and normal.xyz once per mesh vertex.
+_ATOM_MESH_STRIDE = 6 * 4
+# Each atom stores center.xyz, radius, eight RGB colours and eight thresholds.
+_ATOM_INSTANCE_FLOATS = 4 + 3 * _ATOM_MAX_COMPONENTS + _ATOM_MAX_COMPONENTS
+_ATOM_INSTANCE_STRIDE = _ATOM_INSTANCE_FLOATS * 4
 
 _CELL_DASH_PATTERN = (8.0, 4.0)
 
@@ -184,6 +191,8 @@ layout(location = 9) in vec3 a_colour7;
 layout(location = 10) in vec4 a_cumulative0;
 layout(location = 11) in vec4 a_cumulative1;
 
+layout(location = 12) in vec4 a_center_radius;
+
 uniform mat4 u_projection;
 uniform mat3 u_orientation;
 
@@ -200,7 +209,7 @@ flat out vec4 v_cumulative0;
 flat out vec4 v_cumulative1;
 
 void main() {
-    vec3 camera_position = u_orientation * a_position;
+    vec3 camera_position = u_orientation * (a_center_radius.xyz + a_position * a_center_radius.w);
     v_normal = u_orientation * a_normal;
     v_colour0 = a_colour0;
     v_colour1 = a_colour1;
@@ -498,36 +507,6 @@ def _vertex_block(
     )
 
 
-def _atom_vertex_block(
-    positions: np.ndarray,
-    normals: np.ndarray,
-    colours: np.ndarray,
-    cumulative: np.ndarray,
-) -> np.ndarray:
-    positions = np.asarray(positions, dtype=np.float32).reshape(-1, 3)
-    normals = np.asarray(normals, dtype=np.float32).reshape(-1, 3)
-    colours = np.asarray(colours, dtype=np.float32).reshape(_ATOM_MAX_COMPONENTS, 3)
-    cumulative = np.asarray(cumulative, dtype=np.float32).reshape(_ATOM_MAX_COMPONENTS)
-    if positions.shape != normals.shape:
-        raise ValueError("positions and normals must have matching shapes")
-    count = positions.shape[0]
-    if count == 0:
-        return np.empty((0, _ATOM_VERTEX_FLOATS), dtype=np.float32)
-    colour_values = np.broadcast_to(colours.reshape(1, -1), (count, 3 * _ATOM_MAX_COMPONENTS))
-    cumulative_values = np.broadcast_to(cumulative.reshape(1, -1), (count, _ATOM_MAX_COMPONENTS))
-    return np.ascontiguousarray(
-        np.concatenate((positions, normals, colour_values, cumulative_values), axis=1),
-        dtype=np.float32,
-    )
-
-
-def _combine_atom_blocks(blocks: list[np.ndarray]) -> np.ndarray:
-    nonempty = [block for block in blocks if block.size]
-    if not nonempty:
-        return np.empty((0, _ATOM_VERTEX_FLOATS), dtype=np.float32)
-    return np.ascontiguousarray(np.concatenate(nonempty, axis=0), dtype=np.float32)
-
-
 def _combine_blocks(blocks: list[np.ndarray]) -> np.ndarray:
     nonempty = [block for block in blocks if block.size]
     if not nonempty:
@@ -593,6 +572,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
         self._atom_vao = 0
         self._atom_vbo = 0
+        self._atom_mesh_vbo = 0
+        self._atom_ebo = 0
+        self._atom_index_count = 0
         self._atom_count = 0
         self._opaque_vao = 0
         self._opaque_vbo = 0
@@ -634,10 +616,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._bond_dirty = True
         self._intersection_dirty = True
 
-        # Expensive tessellation depends on the Scene, not on most display
-        # switches.  Keep it on the CPU and reuse it when the host toggles
-        # polyhedra, bonds, engraving, etc.
-        self._atom_mesh_cache: dict[tuple[int, float], tuple[np.ndarray, np.ndarray]] = {}
+        # Cylinder and face tessellation depends on the Scene, not on most
+        # display switches. Atoms use one shared GPU sphere instead.
         self._bond_mesh_cache: dict[tuple[int, float], tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]] = {}
         self._poly_face_mesh_cache: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
         self._hatch_mesh_cache: dict[int, OrderedDict[int, np.ndarray]] = {}
@@ -669,13 +649,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._atom_outline_dirty = True
         self.update()
 
-    def _clear_mesh_caches(self, *, atoms_only: bool = False) -> None:
-        self._atom_mesh_cache.clear()
-        if not atoms_only:
-            self._bond_mesh_cache.clear()
-            self._poly_face_mesh_cache.clear()
-            self._hatch_mesh_cache.clear()
-            self._hatch_view_key = None
+    def _clear_mesh_caches(self) -> None:
+        self._bond_mesh_cache.clear()
+        self._poly_face_mesh_cache.clear()
+        self._hatch_mesh_cache.clear()
+        self._hatch_view_key = None
 
     def set_scene(self, scene: Scene | None, *, reset_camera: bool = True) -> None:
         if scene is not None and not isinstance(scene, Scene):
@@ -732,7 +710,6 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if "show_external_atoms" in changed:
             self._bond_dirty = True
         if "atom_scale" in changed:
-            self._clear_mesh_caches(atoms_only=True)
             self._atom_dirty = True
             self._atom_outline_dirty = True
             self._intersection_dirty = True
@@ -1003,31 +980,39 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBindVertexArray(0)
         return vao, vbo
 
-    @staticmethod
-    def _create_atom_buffer() -> tuple[int, int]:
-        vao = int(glGenVertexArrays(1))
-        vbo = int(glGenBuffers(1))
-        glBindVertexArray(vao)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, _ATOM_VERTEX_STRIDE, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, _ATOM_VERTEX_STRIDE, ctypes.c_void_p(3 * 4))
-        offset = 6
-        for location in range(2, 10):
+    def _create_atom_buffer(self) -> None:
+        # Assign handles immediately so partial initialization can be cleaned up.
+        self._atom_vao = int(glGenVertexArrays(1))
+        self._atom_mesh_vbo = int(glGenBuffers(1))
+        self._atom_ebo = int(glGenBuffers(1))
+        self._atom_vbo = int(glGenBuffers(1))
+        glBindVertexArray(self._atom_vao)
+        positions, normals, indices = indexed_sphere_mesh()
+        mesh = np.ascontiguousarray(np.concatenate((positions, normals), axis=1))
+        glBindBuffer(GL_ARRAY_BUFFER, self._atom_mesh_vbo)
+        glBufferData(GL_ARRAY_BUFFER, mesh.nbytes, mesh, GL_STATIC_DRAW)
+        for location, offset in ((0, 0), (1, 3)):
             glEnableVertexAttribArray(location)
             glVertexAttribPointer(
-                location, 3, GL_FLOAT, GL_FALSE, _ATOM_VERTEX_STRIDE, ctypes.c_void_p(offset * 4)
+                location, 3, GL_FLOAT, GL_FALSE, _ATOM_MESH_STRIDE, ctypes.c_void_p(offset * 4)
             )
-            offset += 3
-        glEnableVertexAttribArray(10)
-        glVertexAttribPointer(10, 4, GL_FLOAT, GL_FALSE, _ATOM_VERTEX_STRIDE, ctypes.c_void_p(offset * 4))
-        offset += 4
-        glEnableVertexAttribArray(11)
-        glVertexAttribPointer(11, 4, GL_FLOAT, GL_FALSE, _ATOM_VERTEX_STRIDE, ctypes.c_void_p(offset * 4))
+            glVertexAttribDivisor(location, 0)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self._atom_ebo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+        self._atom_index_count = int(indices.size)
+
+        glBindBuffer(GL_ARRAY_BUFFER, self._atom_vbo)
+        attributes = [(12, 4, 0)]
+        attributes += [(location, 3, 4 + 3 * (location - 2)) for location in range(2, 10)]
+        attributes += [(10, 4, 28), (11, 4, 32)]
+        for location, size, offset in attributes:
+            glEnableVertexAttribArray(location)
+            glVertexAttribPointer(
+                location, size, GL_FLOAT, GL_FALSE, _ATOM_INSTANCE_STRIDE, ctypes.c_void_p(offset * 4)
+            )
+            glVertexAttribDivisor(location, 1)
         glBindBuffer(GL_ARRAY_BUFFER, 0)
         glBindVertexArray(0)
-        return vao, vbo
 
     @staticmethod
     def _upload_static(vao: int, vbo: int, vertices: np.ndarray) -> int:
@@ -1054,7 +1039,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 _EDGE_FRAGMENT_SHADER,
                 _EDGE_GEOMETRY_SHADER,
             )
-            self._atom_vao, self._atom_vbo = self._create_atom_buffer()
+            self._create_atom_buffer()
             self._opaque_vao, self._opaque_vbo = self._create_buffer()
             self._bond_vao, self._bond_vbo = self._create_buffer()
             self._cell_vao, self._cell_vbo = self._create_buffer()
@@ -1097,14 +1082,6 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glDisable(GL_BLEND)
         glEnable(GL_MULTISAMPLE)
 
-    def _cached_atom_mesh(self, index: int, atom, center: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        key = (int(index), round(float(self.atom_scale), 10))
-        mesh = self._atom_mesh_cache.get(key)
-        if mesh is None:
-            mesh = sphere_mesh(center, self._atom_radius(atom))
-            self._atom_mesh_cache[key] = mesh
-        return mesh
-
     def _cached_bond_mesh(self, index: int, first: np.ndarray, second: np.ndarray, radius: float):
         key = (int(index), round(float(radius), 10))
         mesh = self._bond_mesh_cache.get(key)
@@ -1127,19 +1104,24 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._poly_face_mesh_cache[key] = cached
         return cached
 
-    def _build_atom_geometry(self) -> np.ndarray:
+    def _build_atom_instances(self) -> np.ndarray:
+        """Prepare one compact record per visible atom, with no tessellation."""
         if self.scene is None:
-            return np.empty((0, _ATOM_VERTEX_FLOATS), dtype=np.float32)
-        blocks: list[np.ndarray] = []
-        for atom_index, (atom, center) in enumerate(zip(self.scene.atoms, self.scene.atom_centers)):
+            return np.empty((0, _ATOM_INSTANCE_FLOATS), dtype=np.float32)
+        instances = np.empty((len(self.scene.atoms), _ATOM_INSTANCE_FLOATS), dtype=np.float32)
+        count = 0
+        for atom, center in zip(self.scene.atoms, self.scene.atom_centers):
             if not self._atom_visible(atom):
                 continue
             if atom.external and not self.show_external_atoms:
                 continue
-            positions, normals = self._cached_atom_mesh(atom_index, atom, center)
             colours, cumulative = self._atom_pie_material(atom)
-            blocks.append(_atom_vertex_block(positions, normals, colours, cumulative))
-        return _combine_atom_blocks(blocks)
+            instances[count, :3] = center
+            instances[count, 3] = self._atom_radius(atom)
+            instances[count, 4:28] = colours.ravel()
+            instances[count, 28:] = cumulative
+            count += 1
+        return np.ascontiguousarray(instances[:count])
 
     def _build_colour_bond_geometry(self) -> np.ndarray:
         if self.scene is None:
@@ -1166,10 +1148,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def _build_static_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[_PolyhedronRange], np.ndarray, list[_PolyhedronRange], list[_PolyhedronRange]]:
         if self.scene is None:
             empty = np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
-            atom_empty = np.empty((0, _ATOM_VERTEX_FLOATS), dtype=np.float32)
+            atom_empty = np.empty((0, _ATOM_INSTANCE_FLOATS), dtype=np.float32)
             return atom_empty, empty, empty.copy(), empty.copy(), [], empty.copy(), [], []
 
-        atom_blocks: list[np.ndarray] = []
         opaque_blocks: list[np.ndarray] = []
         opaque_ranges: list[_PolyhedronRange] = []
         cell_blocks: list[np.ndarray] = []
@@ -1277,7 +1258,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     ))
 
         return (
-            _combine_atom_blocks(atom_blocks),
+            np.empty((0, _ATOM_INSTANCE_FLOATS), dtype=np.float32),
             _combine_blocks(opaque_blocks),
             _combine_blocks(cell_blocks),
             _combine_blocks(face_blocks),
@@ -1626,7 +1607,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._bond_dirty = False
 
     def _rebuild_atom_cache(self) -> None:
-        atoms = self._build_atom_geometry()
+        atoms = self._build_atom_instances()
         self._atom_count = self._upload_static(self._atom_vao, self._atom_vbo, atoms)
         self._atom_dirty = False
 
@@ -1992,7 +1973,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 self._draw_buffer(self._bond_vao, self._bond_count, GL_TRIANGLES)
             if self.show_atoms and self._atom_count > 0:
                 self._set_atom_uniforms()
-                self._draw_buffer(self._atom_vao, self._atom_count, GL_TRIANGLES)
+                glBindVertexArray(self._atom_vao)
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, self._atom_index_count, GL_UNSIGNED_INT,
+                    ctypes.c_void_p(0), self._atom_count,
+                )
+                glBindVertexArray(0)
                 self._set_frame_uniforms()
 
             # Atom silhouette and atom/face intersection ink belong to the atom
@@ -2080,7 +2066,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
     def _reset_gpu_objects(self) -> None:
         for attribute in (
-            "_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
+            "_atom_vbo", "_atom_mesh_vbo", "_atom_ebo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
             "_face_vbo", "_face_edge_vbo",
             "_atom_outline_vbo", "_intersection_vbo", "_engraving_bond_vbo",
             "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
@@ -2099,7 +2085,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         ):
             setattr(self, attribute, -1)
         for attribute in (
-            "_atom_count", "_opaque_count", "_bond_count", "_cell_count",
+            "_atom_count", "_atom_index_count", "_opaque_count", "_bond_count", "_cell_count",
             "_face_count", "_face_edge_count", "_hatch_count",
             "_atom_outline_count", "_intersection_count",
             "_engraving_bond_count",
@@ -2134,7 +2120,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             if can_delete:
                 self._delete_hatch_buffers()
                 for attribute in (
-                    "_atom_vbo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
+                    "_atom_vbo", "_atom_mesh_vbo", "_atom_ebo", "_opaque_vbo", "_bond_vbo", "_cell_vbo",
                     "_face_vbo", "_face_edge_vbo",
                     "_atom_outline_vbo", "_intersection_vbo",
                     "_engraving_bond_vbo",

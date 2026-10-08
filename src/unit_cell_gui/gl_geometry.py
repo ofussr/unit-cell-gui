@@ -55,6 +55,23 @@ def sphere_mesh(
     return np.asarray(positions, dtype=np.float32), np.asarray(normals, dtype=np.float32)
 
 
+def indexed_sphere_mesh() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Index the default unit sphere without changing its triangle sequence.
+
+    Exact deduplication preserves even the original seam and pole coordinates.
+    Expanding the returned indices reproduces ``sphere_mesh(zeros(3), 1)``.
+    """
+    positions, normals = sphere_mesh(np.zeros(3), 1.0)
+    vertices, indices = np.unique(
+        np.concatenate((positions, normals), axis=1), axis=0, return_inverse=True,
+    )
+    return (
+        np.ascontiguousarray(vertices[:, :3]),
+        np.ascontiguousarray(vertices[:, 3:]),
+        np.ascontiguousarray(indices, dtype=np.uint32),
+    )
+
+
 def cylinder_mesh(
     first: np.ndarray,
     second: np.ndarray,
@@ -133,4 +150,4 @@ def line_vertices(first: np.ndarray, second: np.ndarray) -> tuple[np.ndarray, np
     return positions, normals
 
 
-__all__ = ["cylinder_mesh", "line_vertices", "polygon_triangles", "sphere_mesh"]
+__all__ = ["cylinder_mesh", "indexed_sphere_mesh", "line_vertices", "polygon_triangles", "sphere_mesh"]

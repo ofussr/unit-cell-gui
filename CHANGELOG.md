@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.3 - 2026-10-08
+
+### Performance
+
+- Render atoms with one indexed unit-sphere mesh and one compact instance
+  record per visible atom using `glDrawElementsInstanced`.
+- Replace repeated per-vertex centre, radius, colour and occupancy data with
+  144-byte instance records; keep the shared mesh and index buffers resident
+  during atom scale, colour, occupancy visibility and scene changes.
+- Remove individual CPU sphere tessellation and the per-atom mesh cache.
+
+### Compatibility
+
+- Preserve the public scene models, viewer aliases, display options, style
+  overrides, orientation synchronization and interaction signals.
+- Keep OpenGL 3.3 core and GLSL 330 requirements, with 13 attribute locations
+  and no new dependencies or native extension.
+- Preserve the original sphere triangles and normals, mixed/partial occupancy
+  materials, hidden occupancy sectors, external atoms, colour and engraving
+  modes, and the existing outline/intersection/hatching passes.
+- Release and recreate mesh, index and instance buffers with viewer context
+  cleanup/reinitialization.
+
 ## 0.2.2 - 2026-10-01
 
 ### Fixed
