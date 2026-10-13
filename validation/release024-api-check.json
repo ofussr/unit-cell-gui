@@ -1,0 +1,18 @@
+{
+  "baseline_version": "0.2.3",
+  "old_public_signatures_preserved": 17,
+  "new_public_methods": [
+    "OpenGLUnitCellViewer.get_atom_positions",
+    "OpenGLUnitCellViewer.get_atom_visibility",
+    "OpenGLUnitCellViewer.get_polyhedra",
+    "OpenGLUnitCellViewer.reset_scene_updates",
+    "OpenGLUnitCellViewer.set_atom_positions",
+    "OpenGLUnitCellViewer.set_atom_visibility",
+    "OpenGLUnitCellViewer.update_polyhedra",
+    "OpenGLUnitCellViewer.update_scene"
+  ],
+  "models_unchanged": true,
+  "dependencies_unchanged": true,
+  "wheel_matches_python_sources": 10,
+  "sdist_release_content": "passed"
+}

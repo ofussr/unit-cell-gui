@@ -1,0 +1,9 @@
+Processing ./release024-sdist-check/unit_cell_gui-0.2.4
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: unit-cell-gui
+  Building wheel for unit-cell-gui (pyproject.toml): started
+  Building wheel for unit-cell-gui (pyproject.toml): finished with status 'done'
+  Created wheel for unit-cell-gui: filename=unit_cell_gui-0.2.4-py3-none-any.whl size=50297 sha256=170d38e3f1f9a716783497af11c9c2c8f62ba392c01d1ce98a5a234aa4e74c77
+  Stored in directory: /root/.cache/pip/wheels/f6/62/32/1caee4ea3884804707f6e07dbbad07d4da6c4e95a62b413938
+Successfully built unit-cell-gui

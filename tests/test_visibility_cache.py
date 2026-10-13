@@ -4,6 +4,7 @@ from contextlib import ExitStack
 import os
 from types import SimpleNamespace
 import unittest
+import shiboken6
 from unittest.mock import patch
 
 import numpy as np
@@ -48,6 +49,7 @@ class VisibilityCacheTests(unittest.TestCase):
 
     def tearDown(self):
         self.viewer.close()
+        shiboken6.delete(self.viewer)
 
     def test_site_visibility_keeps_static_geometry_and_intersections(self):
         before = self.viewer._build_static_geometry()
@@ -79,6 +81,10 @@ class VisibilityCacheTests(unittest.TestCase):
             for name in ("glBindVertexArray", "glEnable", "glBlendFunc", "glDepthMask", "glDisable"):
                 stack.enter_context(patch.object(renderer, name))
             stack.enter_context(patch.object(self.viewer, "_set_edge_uniforms"))
+            stack.enter_context(patch.object(self.viewer, "_set_instance_uniforms"))
+            stack.enter_context(patch.object(self.viewer, "_bind_primitive"))
+            draw_ordered = stack.enter_context(patch.object(self.viewer, "_draw_ordered_edge_instances"))
+            draw_instances = stack.enter_context(patch.object(self.viewer, "_draw_primitive_instances"))
             draw = stack.enter_context(patch.object(renderer, "glDrawArrays"))
             for method, ranges in (
                 (self.viewer._draw_opaque_polyhedra, self.viewer._opaque_ranges),
@@ -86,15 +92,18 @@ class VisibilityCacheTests(unittest.TestCase):
                 (self.viewer._draw_face_edges, self.viewer._face_edge_ranges),
                 (self.viewer._draw_atom_face_intersections, self.viewer._intersection_ranges),
             ):
-                draw.reset_mock()
+                draw.reset_mock(); draw_instances.reset_mock(); draw_ordered.reset_mock()
                 method()
-                drawn = sorted((call.args[1], call.args[2]) for call in draw.call_args_list)
+                active = draw if method == self.viewer._draw_atom_face_intersections else draw_instances
+                drawn = sorted((call.args[1], call.args[2]) for call in active.call_args_list)
+                if method == self.viewer._draw_face_edges:
+                    drawn = sorted((item.first, item.count) for call in draw_ordered.call_args_list for item in call.args[0])
                 expected = sorted((item.first, item.count) for item in ranges if item.site_key not in {"p1", "p2"})
                 self.assertEqual(drawn, expected)
                 self.viewer.show_polyhedra = False
-                draw.reset_mock()
+                draw.reset_mock(); draw_instances.reset_mock(); draw_ordered.reset_mock()
                 method()
-                draw.assert_not_called()
+                draw.assert_not_called(); draw_instances.assert_not_called(); draw_ordered.assert_not_called()
                 self.viewer.show_polyhedra = True
 
     def _fake_gpu(self, stack):
@@ -223,11 +232,13 @@ class OpenGLVisibilityTests(unittest.TestCase):
         self.app.processEvents()
         if not self.viewer.isValid():
             self.viewer.close()
+            shiboken6.delete(self.viewer)
             self.skipTest("No OpenGL context could be created")
         self.assertIsNone(self.viewer.opengl_error)
 
     def tearDown(self):
         self.viewer.close()
+        shiboken6.delete(self.viewer)
 
     def pixels(self):
         image = self.viewer.grabFramebuffer().convertToFormat(QImage.Format.Format_RGBA8888)

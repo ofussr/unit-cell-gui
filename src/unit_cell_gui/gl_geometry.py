@@ -117,6 +117,16 @@ def cylinder_mesh(
     return np.asarray(positions, dtype=np.float32), np.asarray(normals, dtype=np.float32)
 
 
+def indexed_cylinder_mesh() -> tuple[np.ndarray, np.ndarray]:
+    """Default open cylinder, with local radial XY and axial Z in [0, 1]."""
+    positions, _ = cylinder_mesh(np.zeros(3), np.array([0., 0., 1.]), 1.)
+    # The original Z-aligned helper chooses -X/-Y as its radial frame.
+    # Store +cos/+sin so instances can supply the original world-space frame.
+    positions[:, :2] *= -1
+    vertices, indices = np.unique(positions, axis=0, return_inverse=True)
+    return np.ascontiguousarray(vertices), np.ascontiguousarray(indices, dtype=np.uint32)
+
+
 def polygon_triangles(
     vertices: np.ndarray,
     polyhedron_center: np.ndarray | None = None,
@@ -150,4 +160,4 @@ def line_vertices(first: np.ndarray, second: np.ndarray) -> tuple[np.ndarray, np
     return positions, normals
 
 
-__all__ = ["cylinder_mesh", "indexed_sphere_mesh", "line_vertices", "polygon_triangles", "sphere_mesh"]
+__all__ = ["cylinder_mesh", "indexed_sphere_mesh", "indexed_cylinder_mesh", "line_vertices", "polygon_triangles", "sphere_mesh"]

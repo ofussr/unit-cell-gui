@@ -1,0 +1,55 @@
+{
+  "partial": {
+    "framebuffer_median_ms": 97.42316250003569,
+    "renderer_upload_bytes_per_frame": [
+      532,
+      532,
+      532,
+      532,
+      532,
+      532,
+      532,
+      532
+    ],
+    "buffer_allocations_per_frame": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "full": {
+    "framebuffer_median_ms": 123.55882650012973,
+    "renderer_upload_bytes_per_frame": [
+      206304,
+      206304,
+      206304,
+      206304,
+      206304,
+      206304,
+      206304,
+      206304
+    ],
+    "buffer_allocations_per_frame": [
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8
+    ]
+  },
+  "version": "0.2.4",
+  "installed_from": "/workspace/scratch/a21175bb2262/release024-wheel-install/unit_cell_gui/__init__.py",
+  "example": "passed",
+  "atoms": 580,
+  "bonds": 579,
+  "samples_per_mode": 8,
+  "environment": "Linux, Xvfb, Mesa software OpenGL 3.3; framebuffer readback included"
+}

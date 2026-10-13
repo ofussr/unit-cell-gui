@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import unittest
+import shiboken6
 
 import numpy as np
 
@@ -220,6 +221,7 @@ class ViewerTests(unittest.TestCase):
         self.assertEqual(actual.profile(), preferred.profile())
         self.assertEqual(actual.samples(), preferred.samples())
         viewer.close()
+        shiboken6.delete(viewer)
 
     def test_input_output_orientation_and_camera_controls(self):
         viewer = UnitCellViewer()
@@ -253,6 +255,7 @@ class ViewerTests(unittest.TestCase):
         np.testing.assert_array_equal(viewer.orientation, requested)
         self.assertEqual(len(received), 1)
         viewer.close()
+        shiboken6.delete(viewer)
 
     def test_rendering_does_not_mutate_input_scene(self):
         viewer = UnitCellViewer()
@@ -265,6 +268,8 @@ class ViewerTests(unittest.TestCase):
         self.assertFalse(image.isNull())
         np.testing.assert_array_equal(scene.polyhedra[0].vertices, vertices)
         np.testing.assert_array_equal(scene.atom_centers, centers)
+        viewer.close()
+        shiboken6.delete(viewer)
 
     def test_style_overrides_are_copied_at_the_public_boundary(self):
         viewer = UnitCellViewer()
@@ -276,6 +281,8 @@ class ViewerTests(unittest.TestCase):
         visibility["Nb:Nb1"] = True
         self.assertFalse(viewer.atom_component_visibility["Nb:Nb1"])
         self.assertEqual(viewer.polyhedron_opaque_sites, {"centre"})
+        viewer.close()
+        shiboken6.delete(viewer)
 
 
 if __name__ == "__main__":

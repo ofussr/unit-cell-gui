@@ -1,0 +1,1842 @@
+[
+  {
+    "case": "atoms-hidden-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "atoms-hidden-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "base-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "base-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 50,
+      "max_channel_difference": 123
+    },
+    "contact_colour_change": {
+      "pixels": 50,
+      "max_channel_difference": 123
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-0-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-0-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-1-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-1-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-2-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-2-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-3-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-3-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-4-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-4-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-5-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-5-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "component-hidden-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "component-hidden-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "eight-ten-partial-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "eight-ten-partial-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "external-hidden-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "external-hidden-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-False-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 188,
+      "max_channel_difference": 148
+    },
+    "contact_colour_change": {
+      "pixels": 188,
+      "max_channel_difference": 148
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-False-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 91,
+      "max_channel_difference": 148
+    },
+    "contact_colour_change": {
+      "pixels": 91,
+      "max_channel_difference": 148
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-True-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-True-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "opaque-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "opaque-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 40,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 40,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-0-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 1486,
+      "max_channel_difference": 128
+    },
+    "contact_colour_change": {
+      "pixels": 1483,
+      "max_channel_difference": 128
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-0-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 985,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 985,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-47-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 1362,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 1360,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-47-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 1279,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 1279,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-0-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 8
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 8
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-0-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 8
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 8
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-47-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-47-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "pentagon-False",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 120,
+      "max_channel_difference": 164
+    },
+    "contact_colour_change": {
+      "pixels": 120,
+      "max_channel_difference": 164
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "pentagon-True",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "poly-hidden-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "poly-hidden-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "quad-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "quad-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 6,
+      "max_channel_difference": 3
+    },
+    "contact_colour_change": {
+      "pixels": 6,
+      "max_channel_difference": 3
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "rotated-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "rotated-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 6,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 5,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "scaled-bw",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "scaled-color",
+    "scale": 1,
+    "release_vs_023": {
+      "pixels": 805,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 804,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "atoms-hidden-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "atoms-hidden-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "base-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "base-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 129,
+      "max_channel_difference": 148
+    },
+    "contact_colour_change": {
+      "pixels": 129,
+      "max_channel_difference": 148
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-0-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-0-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-1-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-1-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-2-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-2-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-3-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-3-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-4-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-4-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-5-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "bond-axis-5-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "component-hidden-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 4,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 4,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "component-hidden-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 11,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 11,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "eight-ten-partial-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 5,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 5,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "eight-ten-partial-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 11,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 11,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "external-hidden-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "external-hidden-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 8,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 8,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-False-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 482,
+      "max_channel_difference": 183
+    },
+    "contact_colour_change": {
+      "pixels": 482,
+      "max_channel_difference": 183
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-False-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 235,
+      "max_channel_difference": 183
+    },
+    "contact_colour_change": {
+      "pixels": 235,
+      "max_channel_difference": 183
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-True-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "multiple-True-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "opaque-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "opaque-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 85,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 85,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-0-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 4268,
+      "max_channel_difference": 138
+    },
+    "contact_colour_change": {
+      "pixels": 4254,
+      "max_channel_difference": 138
+    },
+    "geometry_vs_023": {
+      "pixels": 14,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-0-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 2289,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 2281,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 8,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-47-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 3432,
+      "max_channel_difference": 161
+    },
+    "contact_colour_change": {
+      "pixels": 3428,
+      "max_channel_difference": 161
+    },
+    "geometry_vs_023": {
+      "pixels": 4,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-False-47-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 3122,
+      "max_channel_difference": 161
+    },
+    "contact_colour_change": {
+      "pixels": 3120,
+      "max_channel_difference": 161
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-0-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-0-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-47-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "overlap-True-47-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "pentagon-False",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 289,
+      "max_channel_difference": 167
+    },
+    "contact_colour_change": {
+      "pixels": 287,
+      "max_channel_difference": 167
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "pentagon-True",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "poly-hidden-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "poly-hidden-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "quad-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "quad-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 6,
+      "max_channel_difference": 2
+    },
+    "contact_colour_change": {
+      "pixels": 6,
+      "max_channel_difference": 2
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "rotated-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 2,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "rotated-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 8,
+      "max_channel_difference": 2
+    },
+    "contact_colour_change": {
+      "pixels": 8,
+      "max_channel_difference": 2
+    },
+    "geometry_vs_023": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "scaled-bw",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "contact_colour_change": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    },
+    "geometry_vs_023": {
+      "pixels": 3,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  },
+  {
+    "case": "scaled-color",
+    "scale": 2,
+    "release_vs_023": {
+      "pixels": 2032,
+      "max_channel_difference": 160
+    },
+    "contact_colour_change": {
+      "pixels": 2031,
+      "max_channel_difference": 160
+    },
+    "geometry_vs_023": {
+      "pixels": 1,
+      "max_channel_difference": 1
+    },
+    "geometry_vs_03": {
+      "pixels": 0,
+      "max_channel_difference": 0
+    }
+  }
+]

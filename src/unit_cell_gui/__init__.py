@@ -8,7 +8,7 @@ from .hatching import (
     quadrilateral_hatch_line_count,
 )
 from .models import Atom, AtomComponent, DisplayOptions, Polyhedron, Scene, StyleOverrides
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 
 def __getattr__(name):

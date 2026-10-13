@@ -1,6 +1,62 @@
 # Changelog
 
-## 0.2.3 - 2026-10-08
+## 0.2.4 - 2026-10-13
+
+Changes since 0.2.3:
+
+- Instance camera-facing atom outlines, coloured half-bonds, polyhedron fill
+  triangles, physical edges and engraving bonds using shared meshes.
+- Keep geometry resident during camera changes; update edge sorting through
+  compact index lists and split large texture buffers at driver limits.
+- Add atomic indexed external updates for atom positions/visibility and
+  polyhedron replacement, with effective-state getters and reset.
+- Patch affected atom records and existing adjacent bonds; give modified
+  polyhedra independent buffers and refresh dependent section/hatch caches.
+- Match atom/face intersection curves to the face colour in coloured mode,
+  including polyhedron colour overrides; retain black ink in engraving mode.
+- Refresh contact colours after display-mode, style or polyhedron changes.
+- Preserve input Scene, camera, existing API/models, line widths, intact-polygon
+  hatching and OpenGL 3.3 support. Add documentation and an external-control example.
+
+## 0.2.3.03 - 2026-10-13 (local experiment)
+
+- Add atomic indexed `update_scene` packets, atom coordinate/visibility setters,
+  polyhedron updates, reset and effective-state getters.
+- Keep original Scene data and camera unchanged; preserve host style restrictions.
+- Patch only changed atom/outline rows and existing adjacent bond records.
+- Give replaced polyhedra independent buffers; refresh only dependent sections
+  and hatching, preserving intact faces, transparency ordering and line styles.
+- Retain clipped stable slots for hidden atoms and degenerate bonds.
+- Coalesce GPU updates until paint and release dynamic resources with scene/context.
+- Include an external-control example and preserve existing API signatures.
+- Python packaging normalizes `0.2.3.03` to `0.2.3.3`.
+
+## 0.2.3.02 - 2026-10-12 (local experiment)
+
+- Render coloured half-bonds with one shared indexed cylinder.
+- Render polyhedron fill triangles, physical edges and engraving bonds
+  with shared primitives and compact instance records.
+- Preserve face/edge transparency ordering, physical shared-edge deduplication,
+  lighting, line widths, antialiasing and depth offsets on OpenGL 3.3.
+- Batch depth-sorted edges with a small integer order list while keeping
+  coordinates and colours resident.
+- Split primitive instance storage at the driver's texture-buffer limit.
+- Keep hatching and atom/face intersections unchanged; retain intact polygon
+  faces for hatching and preserve the public API.
+- Extend GL resource cleanup and reinitialization for the new passes.
+- Python packaging normalizes `0.2.3.02` to `0.2.3.2`.
+
+## 0.2.3.01 - 2026-10-08 (local experiment)
+
+- Render camera-facing atom silhouettes with a shared instanced ring.
+- Keep outline instance buffers resident during rotation, zoom and resize;
+  update camera transforms and cosmetic radius padding in the vertex shader.
+- Preserve solid/dashed outlines, depth testing, antialiasing and the existing
+  order relative to opaque and transparent scene geometry.
+- Clean up and recreate all new GL resources with the viewer context.
+- Python distribution metadata normalizes this version to `0.2.3.1`.
+
+## 0.2.3 - 2026-10-06
 
 ### Performance
 

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: unit-cell-gui
-Version: 0.2.3
+Version: 0.2.4
 Summary: PySide6 widget for rendering caller-supplied unit-cell scenes
 Author-email: Mikhail Mirushchenko <miruschenko98@gmail.com>
 License-Expression: MIT
@@ -194,3 +194,46 @@ If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22714946-blue.svg)](https://doi.org/10.5281/zenodo.22714946)
 
 You can also use the metadata provided in [`CITATION.cff`](CITATION.cff).
+
+## Shared GPU geometry (0.2.4)
+
+Atoms, camera-facing outlines, coloured bonds, polyhedron fill triangles,
+physical edges and engraving bonds use shared meshes and instance records.
+Camera changes keep geometry resident; depth-sorted edges update compact
+index lists. Large arrays are split at the driver's texture-buffer limit.
+Sphere tessellation remains 720 triangles per atom; no LOD is applied.
+
+Hatching uses intact polygons and the existing stroke algorithm. Line widths,
+antialiasing and transparency order are retained. In coloured mode, atom/face
+intersection curves use the corresponding face colour, including polyhedron
+colour overrides. Engraving keeps black intersection ink.
+
+## External partial updates (0.2.4)
+
+```python
+viewer.update_scene(
+    atom_positions={17: (x, y, z)},
+    atom_visibility={42: False},
+    polyhedra={3: updated_polyhedron},
+)
+```
+
+Original scene indices stay stable; positions are absolute Cartesian XYZ.
+Packets are validated atomically, copied and uploaded on the next paint.
+Only changed atoms, their existing adjacent bonds and affected polyhedra are
+updated; dependent sections and hatching refresh as needed.
+
+`set_atom_positions`, `set_atom_visibility` and `update_polyhedra` provide
+individual setters. `reset_scene_updates()` restores input geometry and local
+visibility while preserving camera and host styles. Effective-state getters
+are `get_atom_positions()`, `get_atom_visibility()` and `get_polyhedra()`.
+
+`viewer.scene` remains the original object; `set_scene()` clears the overrides.
+Call updates on the GUI thread. The host supplies updated polyhedra and bond
+topology; neither is inferred automatically. Local visibility respects host
+component/external-atom switches. A changed state draws a new frame without
+requiring a complete scene rebuild.
+
+See [the API contract](docs/partial-updates.md),
+[the external-control example](examples/partial_updates.py), and
+[changes since 0.2.3](RELEASE_NOTES_0.2.4.md).
