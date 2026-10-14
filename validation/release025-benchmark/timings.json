@@ -1,0 +1,97 @@
+{
+  "version": "0.2.5",
+  "cases": {
+    "atoms580": {
+      "framebuffer_median_ms": 87.39829749993078,
+      "layers": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "geometry_upload_bytes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "polyhedra2": {
+      "framebuffer_median_ms": 21.669034499609552,
+      "layers": [
+        8,
+        10,
+        10,
+        10,
+        10,
+        10,
+        9,
+        9
+      ],
+      "geometry_upload_bytes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "overlap12": {
+      "framebuffer_median_ms": 150.10379749992353,
+      "layers": [
+        25,
+        27,
+        25,
+        25,
+        24,
+        26,
+        27,
+        26
+      ],
+      "geometry_upload_bytes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "demo": {
+      "framebuffer_median_ms": 33.1052409997028,
+      "layers": [
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7
+      ],
+      "geometry_upload_bytes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: unit-cell-gui
-Version: 0.2.4
+Version: 0.2.5
 Summary: PySide6 widget for rendering caller-supplied unit-cell scenes
 Author-email: Mikhail Mirushchenko <miruschenko98@gmail.com>
 License-Expression: MIT
@@ -203,8 +203,7 @@ Camera changes keep geometry resident; depth-sorted edges update compact
 index lists. Large arrays are split at the driver's texture-buffer limit.
 Sphere tessellation remains 720 triangles per atom; no LOD is applied.
 
-Hatching uses intact polygons and the existing stroke algorithm. Line widths,
-antialiasing and transparency order are retained. In coloured mode, atom/face
+Hatching uses intact polygons and the existing stroke algorithm. In coloured mode, atom/face
 intersection curves use the corresponding face colour, including polyhedron
 colour overrides. Engraving keeps black intersection ink.
 
@@ -215,6 +214,7 @@ viewer.update_scene(
     atom_positions={17: (x, y, z)},
     atom_visibility={42: False},
     polyhedra={3: updated_polyhedron},
+    polyhedron_opacities={3: 0.35},
 )
 ```
 
@@ -237,3 +237,24 @@ requiring a complete scene rebuild.
 See [the API contract](docs/partial-updates.md),
 [the external-control example](examples/partial_updates.py), and
 [changes since 0.2.3](RELEASE_NOTES_0.2.4.md).
+
+## Depth peeling and indexed opacities (0.2.5)
+
+Transparent faces and physical edges are composited together in per-pixel depth
+order, correcting rear edges that formerly appeared over foreground faces.
+Peeling processes all visible layers without a fixed cutoff, reusing resident
+instance geometry. Engraving and views without transparent faces keep the
+existing path. The peeled view uses two-times supersampling with sized targets
+created lazily and released on layer/scene/context teardown.
+
+`viewer.set_polyhedron_opacities({3: 0.35, 7: 1.0})` updates a separate GPU
+material table, uploading four bytes per changed object. Values run from 0
+(hidden) to 1 (opaque); `None` restores a per-object default. The getter
+`get_polyhedron_opacities()` returns an independent effective-state copy.
+Fill/edge opacity and render-pass membership change without rebuilding meshes.
+Explicit values survive geometry/style updates; reset and `set_scene` clear them.
+Engraving retains opaque faces for positive values and hides the polyhedron at 0.
+
+Overlapping layers require repeated GPU passes and additional texture memory.
+See [changes since 0.2.4](RELEASE_NOTES_0.2.5.md) and
+[the full opacity contract](docs/partial-updates.md#polyhedron-opacity).

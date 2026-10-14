@@ -20,6 +20,7 @@ from OpenGL.GL import (
     GL_MAX_TEXTURE_BUFFER_SIZE,
     GL_TEXTURE0,
     GL_RGBA32F,
+    GL_R32F,
     GL_INT,
     GL_DYNAMIC_DRAW,
     GL_BLEND,
@@ -103,6 +104,7 @@ from .gl_geometry import indexed_cylinder_mesh, indexed_sphere_mesh, line_vertic
 from .hatching import hatch_division_count
 from .models import DisplayOptions, Scene, StyleOverrides
 from ._scene_updates import SceneView, prepare, same_polyhedron
+from ._depth_peeling import DepthPeeler
 from .qt_config import configure_qt_opengl, preferred_surface_format
 from .view_helpers import _polyhedron_hatches, screen_drag_orientation
 
@@ -348,6 +350,8 @@ layout(location = 0) in float a_corner;
 layout(location = 1) in int a_record;
 uniform int u_use_order;
 uniform samplerBuffer u_records;
+uniform samplerBuffer u_poly_opacities;
+uniform int u_poly_opacities_enabled;
 uniform int u_first;
 uniform int u_record_texels;
 uniform mat4 u_projection;
@@ -360,6 +364,10 @@ void main() {
     int base = record * u_record_texels;
     vec3 position = texelFetch(u_records, base + int(a_corner)).xyz;
     v_colour = texelFetch(u_records, base + u_record_texels - 1);
+    if (u_poly_opacities_enabled != 0) {
+        int material = int(texelFetch(u_records, base).w);
+        if (material > 0) v_colour.a = texelFetch(u_poly_opacities, material - 1).r;
+    }
     v_normal = vec3(0.0);
     v_lit = 0.0;
     gl_Position = u_projection * vec4(u_orientation * position, 1.0);
@@ -376,10 +384,12 @@ uniform mat4 u_projection;
 uniform mat3 u_orientation;
 
 out vec4 v_colour;
+uniform float u_opacity;
 
 void main() {
     vec3 camera_position = u_orientation * a_position;
     v_colour = a_colour;
+    v_colour.a *= u_opacity;
     gl_Position = u_projection * vec4(camera_position, 1.0);
 }
 """
@@ -637,6 +647,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._pending_atoms: set[int] = set()
         self._pending_bonds: set[int] = set()
         self._pending_polyhedra: set[int] = set()
+        self._pending_opacities: set[int] = set()
+        self._poly_opacity_data = np.empty((0,1), np.float32)
+        self._classified_poly_ranges = None
+        self._poly_opacity_vbo = 0
+        self._poly_opacity_texture = 0
         self._pending_sections: set[int] = set()
         self._base_ranges_by_poly: dict[str, dict] = {}
         self._partial_poly_gpu: dict[int, dict] = {}
@@ -690,9 +705,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._edge_uniform_viewport = -1
         self._edge_uniform_width = -1
         self._edge_uniform_depth_bias = -1
+        self._edge_uniform_opacity = -1
         self.opengl_error: str | None = None
         self._cleanup_context = None
         self._cleaning_up = False
+        self._depth_peeler = None
+        self._render_scale = 1
 
         self._atom_vao = 0
         self._atom_vbo = 0
@@ -803,6 +821,15 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         """Return independently owned copies of effective polyhedra."""
         return tuple(replace(poly) for poly in self._display_scene.polyhedra) if self.scene is not None else ()
 
+    def get_polyhedron_opacities(self) -> np.ndarray:
+        """Independent effective material opacities, separate from visibility."""
+        return np.asarray([self._polyhedron_opacity(i) for i in range(len(self.scene.polyhedra))],
+                          dtype=float) if self.scene is not None else np.empty(0, float)
+
+    def set_polyhedron_opacities(self, opacities) -> None:
+        """Set indexed opacities in [0,1]; None restores a per-object default."""
+        self.update_scene(polyhedron_opacities=opacities)
+
     def set_atom_positions(self, positions) -> None:
         self.update_scene(atom_positions=positions)
 
@@ -812,7 +839,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def update_polyhedra(self, polyhedra) -> None:
         self.update_scene(polyhedra=polyhedra)
 
-    def update_scene(self, *, atom_positions=None, atom_visibility=None, polyhedra=None) -> None:
+    def update_scene(self, *, atom_positions=None, atom_visibility=None, polyhedra=None, polyhedron_opacities=None) -> None:
         """Atomically merge indexed overrides, without replacing Scene or camera.
 
         Only supplied indices change. Positions are absolute Cartesian XYZ.
@@ -820,19 +847,30 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         deferred to the next paint with the viewer's context current.
         """
         if self.scene is None:
-            if atom_positions is None and atom_visibility is None and polyhedra is None:
+            if atom_positions is None and atom_visibility is None and polyhedra is None and polyhedron_opacities is None:
                 return
             raise RuntimeError('set_scene() must precede partial updates')
-        positions, visibility, polys = prepare(self.scene, atom_positions, atom_visibility, polyhedra)
+        positions, visibility, polys, opacities = prepare(self.scene, atom_positions, atom_visibility, polyhedra, polyhedron_opacities)
         effective = self._display_scene
         positions = {i: value for i, value in positions.items() if not np.array_equal(value, effective.atom_centers[i])}
         visibility = {i: value for i, value in visibility.items() if value != self._locally_visible(i)}
         polys = {i: value for i, value in polys.items() if not same_polyhedron(value, effective.polyhedra[i])}
-        if not positions and not visibility and not polys:
+        current_opacities = self._scene_updates.opacity_overrides if self._scene_updates else {}
+        opacities = {i: value for i, value in opacities.items() if current_opacities.get(i) != value}
+        if not positions and not visibility and not polys and not opacities:
             return
         if self._scene_updates is None:
             self._scene_updates = SceneView(self.scene)
         view = self._scene_updates
+        for index, value in opacities.items():
+            if value is None:
+                view.opacity_overrides.pop(index, None)
+            else:
+                view.opacity_overrides[index] = value
+        if opacities:
+            self._classified_poly_ranges = None
+            self._hatch_dirty = True
+        self._pending_opacities.update(set(opacities) | set(polys))
         atoms = set(positions) | set(visibility)
         points = []
         for index in atoms:
@@ -880,7 +918,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             return
         self.update_scene(atom_positions={i: self.scene.atom_centers[i] for i in view.position_overrides},
                           atom_visibility={i: True for i in view.visibility_overrides},
-                          polyhedra={i: self.scene.polyhedra[i] for i in view.polyhedron_overrides})
+                          polyhedra={i: self.scene.polyhedra[i] for i in view.polyhedron_overrides},
+                          polyhedron_opacities={i: None for i in view.opacity_overrides})
         self._scene_updates = None
 
     def sizeHint(self) -> QSize:
@@ -913,6 +952,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._scene_updates = None
         self._pending_atoms.clear(); self._pending_bonds.clear()
         self._pending_polyhedra.clear(); self._pending_sections.clear()
+        self._pending_opacities.clear()
+        self._classified_poly_ranges = None
         self._poly_revisions.clear()
         self._atom_gpu_rows.clear(); self._outline_gpu_rows.clear(); self._bond_gpu_rows.clear()
         self._clear_mesh_caches()
@@ -1385,11 +1426,13 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 _PRIMITIVE_VERTEX_SHADER, _EDGE_FRAGMENT_SHADER, _EDGE_GEOMETRY_SHADER,
             )
             uniform_names = ('u_projection', 'u_orientation', 'u_light_dir', 'u_records',
-                             'u_first', 'u_record_texels', 'u_use_order', 'u_viewport', 'u_edge_width', 'u_depth_bias')
+                             'u_first', 'u_record_texels', 'u_use_order', 'u_viewport', 'u_edge_width', 'u_depth_bias', 'u_poly_opacities', 'u_poly_opacities_enabled')
             self._instance_uniforms = {
                 program: {name: glGetUniformLocation(program, name) for name in uniform_names}
                 for program in (self._bond_program, self._triangle_program, self._segment_program)
             }
+            self._poly_opacity_vbo = int(glGenBuffers(1))
+            self._poly_opacity_texture = int(glGenTextures(1))
             self._primitive_mesh_vbo = int(glGenBuffers(1))
             glBindBuffer(GL_ARRAY_BUFFER, self._primitive_mesh_vbo)
             corners = np.array([0., 1., 2.], dtype=np.float32)
@@ -1415,6 +1458,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._edge_uniform_viewport = glGetUniformLocation(self._edge_program, "u_viewport")
             self._edge_uniform_width = glGetUniformLocation(self._edge_program, "u_edge_width")
             self._edge_uniform_depth_bias = glGetUniformLocation(self._edge_program, "u_depth_bias")
+            self._edge_uniform_opacity = glGetUniformLocation(self._edge_program, "u_opacity")
             self._restore_render_state()
             self._gpu_dirty = True
             self._atom_dirty = True
@@ -1529,6 +1573,18 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             polyhedron.site_key, _blend_components(polyhedron.components).name(),
         ))
 
+    def _polyhedron_opacity(self, index, *, use_local=True) -> float:
+        poly = self._display_scene.polyhedra[index]
+        value = self._scene_updates.opacity_overrides.get(index) if self._scene_updates and use_local else None
+        if self.engraving:
+            return 0.0 if value == 0 else 1.0
+        if value is not None:
+            return value
+        if poly.site_key in self.polyhedron_opaque_sites:
+            return 1.0
+        occupancy = min(1.0, sum(max(0.0, float(c.occupancy)) for c in poly.components))
+        return 0.28 + 0.36 * occupancy
+
     def _build_static_geometry(self, *, poly_indices=None, include_cell=True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[_PolyhedronRange], np.ndarray, list[_PolyhedronRange], list[_PolyhedronRange]]:
         if self._display_scene is None:
             empty = np.empty((0, _VERTEX_FLOATS), dtype=np.float32)
@@ -1563,12 +1619,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 polyhedron = self._display_scene.polyhedra[poly_index]
                 opaque_first = opaque_offset
                 colour = self._polyhedron_colour(polyhedron)
-                occupancy = min(
-                    1.0,
-                    sum(max(0.0, float(component.occupancy)) for component in polyhedron.components),
-                )
-                opaque = self.engraving or (polyhedron.site_key in self.polyhedron_opaque_sites)
-                alpha = 1.0 if opaque else (0.28 + 0.36 * occupancy)
+                # Geometry always keeps its host/default material. Indexed
+                # overrides live only in the table, so removing the last one
+                # can disable the extra vertex fetch without rewriting meshes.
+                alpha = self._polyhedron_opacity(poly_index, use_local=False)
+                opaque = alpha == 1
                 edge_colour = QColor(20, 20, 20) if self.engraving else _polyhedron_edge_colour(colour)
                 poly_center = np.asarray(polyhedron.center, dtype=float)
                 edge_faces: dict[tuple[int, int], list[np.ndarray]] = {}
@@ -1577,6 +1632,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                         poly_index, face_index, polyhedron, face
                     )
                     block = self._triangle_instances(positions, colour, alpha)
+                    block[:,3] = poly_index + 1
                     if opaque:
                         opaque_blocks.append(block)
                         opaque_offset += block.shape[0]
@@ -1620,6 +1676,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                         first_point + outward, second_point + outward, edge_colour,
                         alpha=1.0 if self.engraving else alpha,
                     )
+                    edge_block[:,3] = poly_index + 1
                     face_edge_blocks.append(edge_block)
                     midpoint = 0.5 * (first_point + second_point)
                     face_edge_ranges.append(_PolyhedronRange(
@@ -1650,6 +1707,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             (index, float((self.orientation @ polyhedron.center)[2]))
             for index, polyhedron in enumerate(self._display_scene.polyhedra)
             if self.polyhedron_site_visibility.get(polyhedron.site_key, True)
+            and self._polyhedron_opacity(index) > 0
         ]
         if not selected:
             return []
@@ -1981,6 +2039,18 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._face_edge_count = self._upload_primitive('_face_edge', face_edges)
         self._face_edge_ranges = face_edge_ranges
         self._face_edge_order_records = None
+        self._classified_poly_ranges = None
+        self._poly_opacity_data = self.get_polyhedron_opacities().astype(np.float32).reshape(-1,1)
+        if self._poly_opacity_vbo:
+            glBindBuffer(GL_ARRAY_BUFFER, self._poly_opacity_vbo)
+            records = self._poly_opacity_data if len(self._poly_opacity_data) else np.ones((1,1),np.float32)
+            glBufferData(GL_ARRAY_BUFFER, records.nbytes, records, GL_DYNAMIC_DRAW)
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
+            glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, self._poly_opacity_vbo)
+            glBindTexture(GL_TEXTURE_BUFFER, 0)
+            glBindBuffer(GL_ARRAY_BUFFER, 0)
+        self._pending_opacities.clear()
         self._gpu_dirty = False
         self._pending_polyhedra.clear()
 
@@ -2125,6 +2195,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._partial_section_gpu.clear()
 
     def _update_one_polyhedron_gpu(self, index) -> None:
+        self._classified_poly_ranges = None
         geometry = self._build_static_geometry(poly_indices=(index,), include_cell=False)
         data = self._partial_poly_gpu.setdefault(index, {'prefixes': []})
         for kind, array, ranges in (('opaque', geometry[1], geometry[7]),
@@ -2150,7 +2221,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         else:
             buffer.count = self._upload_static(buffer.vao, buffer.vbo, records)
 
-    def _effective_ranges(self, kind) -> list[_PolyhedronRange]:
+    def _stored_ranges(self, kind) -> list[_PolyhedronRange]:
         base = getattr(self, {'opaque': '_opaque_ranges', 'face': '_face_ranges',
                               'face_edge': '_face_edge_ranges', 'section': '_intersection_ranges'}[kind])
         overrides = self._partial_section_gpu if kind == 'section' else self._partial_poly_gpu
@@ -2175,7 +2246,31 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 result.extend(overrides[index].get(kind, []))
         return result
 
+    def _effective_ranges(self, kind) -> list[_PolyhedronRange]:
+        if kind not in ('opaque','face'):
+            return self._stored_ranges(kind)
+        if self._classified_poly_ranges is None:
+            classified = {'opaque': [], 'face': []}
+            for source in ('opaque','face'):
+                for item in self._stored_ranges(source):
+                    opacity = self._polyhedron_opacity(item.poly_index)
+                    if opacity <= 0:
+                        continue
+                    target = 'opaque' if opacity == 1 else 'face'
+                    if source != target and not item.buffer_key:
+                        item = replace(item, buffer_key='_opaque' if source == 'opaque' else '_face')
+                    classified[target].append(item)
+            self._classified_poly_ranges = classified
+        return self._classified_poly_ranges[kind]
+
     def _flush_scene_updates(self) -> None:
+        opacity_rows = sorted(self._pending_opacities)
+        for index in opacity_rows:
+            if index < len(self._poly_opacity_data):
+                self._poly_opacity_data[index,0] = self._polyhedron_opacity(index)
+        if opacity_rows and self._poly_opacity_vbo:
+            self._patch_rows(self._poly_opacity_vbo, self._poly_opacity_data, opacity_rows)
+        self._pending_opacities.clear()
         for mapping, data, vbo in ((self._atom_gpu_rows, self._atom_instance_data, self._atom_vbo),
                                     (self._outline_gpu_rows, self._outline_instance_data, self._atom_outline_vbo)):
             rows = []
@@ -2243,7 +2338,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             GL_TRUE,
             np.asarray(self.orientation, dtype=np.float32),
         )
-        device_ratio = max(1.0, float(self.devicePixelRatioF()))
+        device_ratio = max(1.0, float(self.devicePixelRatioF())) * self._render_scale
         glUniform2f(
             self._edge_uniform_viewport,
             max(1.0, float(self.width()) * device_ratio),
@@ -2251,6 +2346,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         )
         glUniform1f(self._edge_uniform_width, float(width_px) * device_ratio)
         glUniform1f(self._edge_uniform_depth_bias, float(depth_bias))
+        glUniform1f(self._edge_uniform_opacity, 1.0)
 
     def _set_instance_uniforms(self, program: int, record_texels: int = 0,
                                *, width_px: float = 1.575, depth_bias: float = 1e-5) -> None:
@@ -2265,12 +2361,19 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             glUniform1i(uniforms['u_use_order'], 0)
             glUniform1i(uniforms['u_records'], 0)
             glUniform1i(uniforms['u_record_texels'], record_texels)
-            if program == self._segment_program:
-                ratio = max(1., float(self.devicePixelRatioF()))
-                glUniform2f(uniforms['u_viewport'], max(1., self.width() * ratio),
-                            max(1., self.height() * ratio))
-                glUniform1f(uniforms['u_edge_width'], width_px * ratio)
-                glUniform1f(uniforms['u_depth_bias'], depth_bias)
+            glUniform1i(uniforms['u_poly_opacities'], 3)
+            enabled = bool(self._scene_updates and self._scene_updates.opacity_overrides)
+            glUniform1i(uniforms['u_poly_opacities_enabled'], int(enabled))
+            if enabled:
+                glActiveTexture(GL_TEXTURE0 + 3)
+                glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
+                glActiveTexture(GL_TEXTURE0)
+        if program == self._segment_program or (self._depth_peeler and program == self._depth_peeler.edge_program):
+            ratio = max(1., float(self.devicePixelRatioF())) * self._render_scale
+            glUniform2f(uniforms['u_viewport'], max(1., self.width() * ratio),
+                        max(1., self.height() * ratio))
+            glUniform1f(uniforms['u_edge_width'], width_px * ratio)
+            glUniform1f(uniforms['u_depth_bias'], depth_bias)
 
     def _bind_primitive(self, vao: int, texture: int) -> None:
         glBindVertexArray(vao)
@@ -2281,8 +2384,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             (chunks for chunks in self._primitive_chunks.values() if chunks and chunks[0][1] == texture), []
         )
 
-    def _draw_primitive_instances(self, mode: int, first: int, count: int) -> None:
-        program = self._triangle_program if mode == GL_TRIANGLES else self._segment_program
+    def _draw_primitive_instances(self, mode: int, first: int, count: int, *, program=None) -> None:
+        program = program or (self._triangle_program if mode == GL_TRIANGLES else self._segment_program)
         remaining = count
         for _vbo, texture, size in self._bound_primitive_chunks:
             if first >= size:
@@ -2354,7 +2457,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBindVertexArray(0)
 
     def _visible_polyhedron_ranges(self, ranges: list[_PolyhedronRange]) -> list[_PolyhedronRange]:
-        return [item for item in ranges if self.polyhedron_site_visibility.get(item.site_key, True)]
+        return [item for item in ranges if self.polyhedron_site_visibility.get(item.site_key, True)
+                and (item.poly_index is None or self._polyhedron_opacity(item.poly_index) > 0)]
 
     def _draw_opaque_polyhedra(self) -> None:
         if not self.show_polyhedra:
@@ -2375,7 +2479,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def _ordered_face_ranges(self) -> list[_PolyhedronRange]:
         orientation = np.asarray(self.orientation, dtype=float)
         return sorted(self._visible_polyhedron_ranges(self._effective_ranges('face')),
-                      key=lambda item: float((orientation @ item.center)[2]))
+                      key=lambda item: float((orientation @ (item.center if item.center is not None
+                                                            else self._display_scene.polyhedra[item.poly_index].center))[2]))
 
     def _draw_transparent_faces(self) -> None:
         if not self.show_polyhedra:
@@ -2456,7 +2561,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glUniformMatrix3fv(uniforms["u_orientation"], 1, GL_TRUE,
                            np.asarray(self.orientation, dtype=np.float32))
         glUniform1f(uniforms["u_outline_padding"], 0.45 / max(self._screen_scale(), 1e-12))
-        device_ratio = max(1.0, float(self.devicePixelRatioF()))
+        device_ratio = max(1.0, float(self.devicePixelRatioF())) * self._render_scale
         glUniform2f(uniforms["u_viewport"], max(1.0, self.width() * device_ratio),
                     max(1.0, self.height() * device_ratio))
         glUniform1f(uniforms["u_edge_width"], width_px * device_ratio)
@@ -2481,6 +2586,10 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._set_edge_uniforms(width_px=width_px, depth_bias=bias)
         glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glDepthMask(GL_FALSE)
         for item in ranges:
+            local_opacity = (self._scene_updates.opacity_overrides.get(item.poly_index)
+                             if self._scene_updates else None)
+            glUniform1f(self._edge_uniform_opacity, self._polyhedron_opacity(item.poly_index)
+                        if local_opacity is not None else 1.0)
             vao = (self._partial_section_gpu[item.poly_index].vao if item.buffer_key
                    else self._intersection_vao)
             glBindVertexArray(vao)
@@ -2635,6 +2744,24 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             if self._atom_outline_dirty:
                 self._rebuild_atom_outline_cache()
             self._flush_scene_updates()
+            peeled_faces = self._visible_polyhedron_ranges(self._effective_ranges('face')) if self.show_polyhedra and not self.engraving else []
+            peeling = bool(peeled_faces)
+            if peeling:
+                try:
+                    if self._depth_peeler is None:
+                        self._depth_peeler = DepthPeeler(
+                            self, _create_program, _PRIMITIVE_VERTEX_SHADER, _FRAGMENT_SHADER,
+                            _EDGE_FRAGMENT_SHADER, _EDGE_GEOMETRY_SHADER,
+                        )
+                    ratio = max(1., float(self.devicePixelRatioF()))
+                    self._depth_peeler.begin(max(1, round(self.width() * ratio)),
+                                             max(1, round(self.height() * ratio)), background)
+                except Exception as exc:
+                    self.opengl_error = str(exc)
+                    self._draw_overlay()
+                    return
+            elif self._depth_peeler:
+                self._depth_peeler.release_targets()
             self._set_frame_uniforms()
             self._draw_opaque_polyhedra()
             self._draw_colour_bonds()
@@ -2658,15 +2785,31 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._draw_atom_outlines()
 
             self._set_frame_uniforms()
-            self._draw_transparent_faces()
+            if peeling:
+                try:
+                    self._depth_peeler.finish(peeled_faces,
+                        self._visible_polyhedron_ranges(self._effective_ranges('face_edge')))
+                except Exception as exc:
+                    self._depth_peeler.restore()
+                    self._depth_peeler._unbind_textures()
+                    self._restore_render_state()
+                    self.opengl_error = str(exc)
+            else:
+                self._draw_transparent_faces()
             glUseProgram(0)
             self._draw_engraving_bonds()
             self._draw_hatches()
-            self._draw_face_edges()
+            if not peeling:
+                self._draw_face_edges()
             glUseProgram(0)
         # Leave the newly introduced texture-buffer target unbound for Qt's
         # painter/compositor and other widgets sharing this context group.
         glBindTexture(GL_TEXTURE_BUFFER, 0)
+        glActiveTexture(GL_TEXTURE0 + 3)
+        glBindTexture(GL_TEXTURE_BUFFER, 0)
+        glActiveTexture(GL_TEXTURE0)
+        if self.scene is None and self._depth_peeler:
+            self._depth_peeler.release_targets()
         self._draw_overlay()
 
     def mousePressEvent(self, event) -> None:
@@ -2734,6 +2877,13 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             pass
 
     def _reset_gpu_objects(self) -> None:
+        self._poly_opacity_vbo = 0
+        self._poly_opacity_texture = 0
+        self._poly_opacity_data = np.empty((0,1), np.float32)
+        self._classified_poly_ranges = None
+        self._pending_opacities.clear()
+        self._depth_peeler = None
+        self._render_scale = 1
         for attribute in (
             "_atom_vbo", "_atom_mesh_vbo", "_atom_ebo", "_opaque_vbo", "_bond_vbo", "_bond_mesh_vbo", "_bond_ebo", "_primitive_mesh_vbo", "_cell_vbo",
             "_face_vbo", "_face_edge_vbo", "_face_edge_order_vbo",
@@ -2751,6 +2901,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             "_edge_uniform_projection", "_edge_uniform_orientation",
             "_edge_uniform_viewport", "_edge_uniform_width",
             "_edge_uniform_depth_bias",
+            "_edge_uniform_opacity",
         ):
             setattr(self, attribute, -1)
         for attribute in (
@@ -2804,6 +2955,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self.makeCurrent()
         try:
             if can_delete:
+                if self._poly_opacity_texture:
+                    glDeleteTextures(1, [self._poly_opacity_texture])
+                if self._poly_opacity_vbo:
+                    glDeleteBuffers(1, [self._poly_opacity_vbo])
+                if self._depth_peeler:
+                    self._depth_peeler.close()
                 self._delete_partial_poly_buffers()
                 self._delete_partial_section_buffers()
                 self._delete_hatch_buffers()

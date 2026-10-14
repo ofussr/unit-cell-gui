@@ -2,6 +2,7 @@
 from collections.abc import Mapping
 from dataclasses import replace
 import operator
+import numbers
 import numpy as np
 from .models import Polyhedron
 
@@ -25,17 +26,18 @@ def same_polyhedron(first, second):
             and np.array_equal(first.vertices, second.vertices))
 
 
-def prepare(scene, atom_positions, atom_visibility, polyhedra):
+def prepare(scene, atom_positions, atom_visibility, polyhedra, polyhedron_opacities=None):
     result = []
     for mapping, kind, length in ((atom_positions, 'atom', len(scene.atoms)),
                                    (atom_visibility, 'atom', len(scene.atoms)),
-                                   (polyhedra, 'polyhedron', len(scene.polyhedra))):
+                                   (polyhedra, 'polyhedron', len(scene.polyhedra)),
+                                   (polyhedron_opacities, 'polyhedron', len(scene.polyhedra))):
         if mapping is None:
             result.append({}); continue
         if not isinstance(mapping, Mapping):
             raise TypeError('partial updates must be mappings indexed by scene indices')
         result.append({index_key(key, length, kind): value for key, value in mapping.items()})
-    positions, visibility, polys = result
+    positions, visibility, polys, opacities = result
     limit = np.finfo(np.float32).max
     for index, value in list(positions.items()):
         value = np.asarray(value, dtype=float)
@@ -52,7 +54,16 @@ def prepare(scene, atom_positions, atom_visibility, polyhedra):
         if np.any(np.abs(value.center) > limit) or np.any(np.abs(value.vertices) > limit):
             raise ValueError('polyhedron coordinates must be float32-representable')
         polys[index] = replace(value)  # independently own all coordinate arrays
-    return positions, visibility, polys
+    for index, value in list(opacities.items()):
+        if value is None:
+            continue
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+            raise TypeError('polyhedron opacity must be a real number in [0, 1] or None')
+        value = float(value)
+        if not np.isfinite(value) or not 0 <= value <= 1:
+            raise ValueError('polyhedron opacity must be finite and in [0, 1]')
+        opacities[index] = value
+    return positions, visibility, polys, opacities
 
 
 class SceneView:
@@ -63,6 +74,7 @@ class SceneView:
         self.position_overrides = {}
         self.visibility_overrides = {}
         self.polyhedron_overrides = {}
+        self.opacity_overrides = {}
         self.bonds_by_atom = [set() for _ in base.atoms]
         for index, (first, second) in enumerate(base.bonds):
             self.bonds_by_atom[int(first)].add(index)

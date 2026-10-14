@@ -1,4 +1,4 @@
-"""External controls for render-only updates; requires unit-cell-gui >= 0.2.4."""
+"""External controls for render-only updates; requires unit-cell-gui >= 0.2.5."""
 from dataclasses import replace
 import sys
 import numpy as np
@@ -26,14 +26,17 @@ class Host(QWidget):
         self.viewer.set_display_options(show_polyhedra=True)
         self.x=QSlider(Qt.Orientation.Horizontal); self.x.setRange(-80,80)
         self.poly=QSlider(Qt.Orientation.Horizontal); self.poly.setRange(60,150); self.poly.setValue(100)
+        self.opacity=QSlider(Qt.Orientation.Horizontal); self.opacity.setRange(0,100); self.opacity.setValue(64)
         self.visible=QCheckBox('Show atom 1'); self.visible.setChecked(True)
         self.bw=QCheckBox('Black and white'); reset=QPushButton('Reset partial changes')
         controls.addWidget(QLabel('Atom 1: displacement in X'))
         controls.addWidget(self.x); controls.addWidget(self.visible)
         controls.addWidget(QLabel('Polyhedron scale')); controls.addWidget(self.poly)
+        controls.addWidget(QLabel('Polyhedron opacity (colour mode)')); controls.addWidget(self.opacity)
         controls.addWidget(self.bw); controls.addWidget(reset); controls.addStretch()
         self.x.valueChanged.connect(self.apply_batch)
         self.poly.valueChanged.connect(self.apply_batch)
+        self.opacity.valueChanged.connect(lambda value:self.viewer.set_polyhedron_opacities({0:value/100}))
         self.visible.toggled.connect(self.apply_batch)
         self.bw.toggled.connect(lambda value:self.viewer.set_display_options(engraving=value))
         reset.clicked.connect(self.reset_changes)
@@ -45,7 +48,7 @@ class Host(QWidget):
         self.viewer.update_scene(atom_positions={1:center},atom_visibility={1:self.visible.isChecked()},polyhedra={0:poly})
 
     def reset_changes(self):
-        for control,value in ((self.x,0),(self.poly,100),(self.visible,True)):
+        for control,value in ((self.x,0),(self.poly,100),(self.opacity,64),(self.visible,True)):
             control.blockSignals(True)
             if isinstance(control,QCheckBox): control.setChecked(value)
             else: control.setValue(value)

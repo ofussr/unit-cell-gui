@@ -1,0 +1,7 @@
+{
+  "version": "0.2.5",
+  "installed_wheel": "passed",
+  "example_opacity_slider": "passed",
+  "zero_opaque_fractional_and_reset": "passed",
+  "external_geometry_controls": "passed"
+}

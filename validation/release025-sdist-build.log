@@ -1,0 +1,9 @@
+Processing ./release025-sdist-check/unit_cell_gui-0.2.5
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: unit-cell-gui
+  Building wheel for unit-cell-gui (pyproject.toml): started
+  Building wheel for unit-cell-gui (pyproject.toml): finished with status 'done'
+  Created wheel for unit-cell-gui: filename=unit_cell_gui-0.2.5-py3-none-any.whl size=56406 sha256=c112dbdb197ef59f5e17319282813daa39f263c1ed64193632cf562439beaae7
+  Stored in directory: /tmp/pip-ephem-wheel-cache-bhmhclmg/wheels/66/e0/a6/9a641359d5b1f93cb987a3e8efc66a7304b804bc53ee7b7eb6
+Successfully built unit-cell-gui

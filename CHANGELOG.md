@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.5 - 2026-10-14
+
+Changes since 0.2.4:
+
+- Resolve transparent faces and physical edges together with per-pixel depth
+  peeling, correcting rear edges drawn over nearer transparent faces.
+- Process all remaining layers until an occlusion query ends the stack, with
+  lazy sized targets, supersampled antialiasing and conservative scissor bounds.
+- Add indexed `set_polyhedron_opacities`, `get_polyhedron_opacities` and atomic
+  `update_scene(polyhedron_opacities=...)` packets, including per-index default reset.
+- Store one opacity float per polyhedron in a shared GPU material table;
+  update four bytes per changed object without rebuilding geometry.
+- Switch between transparent/opaque passes through resident ranges; zero hides
+  faces, edges, hatches and contact curves. Explicit opacities fade contact curves.
+- Keep Scene, camera, models, dependencies and existing calls compatible;
+  retain opaque engraving fills and preserve local values across mode/context changes.
+- Add opacity controls to the external-host example and document semantics,
+  GPU memory and repeated-pass performance costs.
+
+## 0.2.4.01 - 2026-10-14 (local experiment)
+
+- Composite transparent faces and physical edges together by per-pixel
+  front-to-back depth peeling instead of drawing every edge after all faces.
+- Stop when an occlusion query finds no further fragments, without a fixed
+  layer cutoff. Reuse instanced geometry and batch unsorted resident ranges.
+- Keep opaque atoms/bonds/faces as the depth-tested base; retain the existing
+  engraving path and external partial-update API.
+- Use two-times supersampling for the peeled view, bounded scissor regions,
+  lazy shader/target creation and resize/context/scene cleanup.
+- Python packaging normalizes `0.2.4.01` to `0.2.4.1`.
+
 ## 0.2.4 - 2026-10-13
 
 Changes since 0.2.3:

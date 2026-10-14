@@ -143,7 +143,8 @@ class OpenGLSceneInstanceTests(unittest.TestCase):
             self.pixels()
             self.assertTrue(any(call.args[1]==72 and call.args[4]==2 for call in cylinder.call_args_list))
             tris=[c.args for c in primitive.call_args_list if c.args[0]==renderer.GL_TRIANGLES]
-            self.assertEqual(sorted((args[1],args[2]) for args in tris),sorted((r.first,r.count) for r in self.viewer._face_ranges))
+            self.assertEqual(len(tris),self.viewer._depth_peeler.layers+1)
+            self.assertTrue(all((args[1],args[2])==(0,self.viewer._face_count) for args in tris))
             self.assertTrue(any(c.args[:3]==(renderer.GL_LINES,0,2) and c.args[3]==24 for c in lines.call_args_list))
 
     def test_camera_visibility_and_style_preserve_shared_meshes_and_restore_frame(self):

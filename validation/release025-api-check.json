@@ -1,0 +1,11 @@
+{
+  "version": "0.2.5",
+  "old_methods_unchanged_except_optional_keyword": 25,
+  "new_methods": [
+    "OpenGLUnitCellViewer.get_polyhedron_opacities",
+    "OpenGLUnitCellViewer.set_polyhedron_opacities"
+  ],
+  "models_unchanged": true,
+  "wheel_source_files_match": 11,
+  "sdist_release_content": "passed"
+}

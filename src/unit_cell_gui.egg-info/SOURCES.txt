@@ -6,11 +6,13 @@ README.md
 RELEASE_NOTES_0.2.2.md
 RELEASE_NOTES_0.2.3.md
 RELEASE_NOTES_0.2.4.md
+RELEASE_NOTES_0.2.5.md
 THIRD_PARTY_NOTICES.txt
 pyproject.toml
 docs/partial-updates.md
 examples/partial_updates.py
 src/unit_cell_gui/__init__.py
+src/unit_cell_gui/_depth_peeling.py
 src/unit_cell_gui/_scene_updates.py
 src/unit_cell_gui/gl_geometry.py
 src/unit_cell_gui/hatching.py
@@ -32,6 +34,8 @@ tests/test_unit_cell_gui.py
 tests/test_visibility_cache.py
 tests/test_z_atom_instancing.py
 tests/test_z_contact_colours.py
+tests/test_z_depth_peeling.py
+tests/test_z_opacities.py
 tests/test_z_outline_instancing.py
 tests/test_z_scene_instancing.py
 tests/test_z_updates.py

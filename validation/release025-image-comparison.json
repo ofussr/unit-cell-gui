@@ -1,0 +1,554 @@
+[
+  {
+    "case": "atoms-hidden-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "atoms-hidden-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "base-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "base-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-0-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-0-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-1-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-1-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-2-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-2-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-3-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-3-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-4-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-4-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-5-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-5-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "component-hidden-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "component-hidden-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "eight-ten-partial-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "eight-ten-partial-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "external-hidden-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "external-hidden-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-False-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-False-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-True-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-True-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "opaque-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "opaque-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-0-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-0-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-47-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-47-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-0-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-0-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-47-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-47-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "pentagon-False",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "pentagon-True",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "poly-hidden-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "poly-hidden-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "quad-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "quad-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "rotated-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "rotated-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "scaled-bw",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "scaled-color",
+    "scale": 1,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "atoms-hidden-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "atoms-hidden-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "base-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "base-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-0-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-0-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-1-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-1-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-2-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-2-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-3-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-3-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-4-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-4-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-5-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "bond-axis-5-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "component-hidden-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "component-hidden-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "eight-ten-partial-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "eight-ten-partial-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "external-hidden-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "external-hidden-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-False-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-False-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-True-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "multiple-True-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "opaque-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "opaque-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-0-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-0-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-47-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-False-47-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-0-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-0-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-47-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "overlap-True-47-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "pentagon-False",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "pentagon-True",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "poly-hidden-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "poly-hidden-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "quad-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "quad-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "rotated-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "rotated-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "scaled-bw",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  },
+  {
+    "case": "scaled-color",
+    "scale": 2,
+    "pixels": 0,
+    "max_channel_difference": 0
+  }
+]

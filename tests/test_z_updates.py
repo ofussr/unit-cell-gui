@@ -116,6 +116,8 @@ class OpenGLUpdatesTests(unittest.TestCase):
             polyhedron_site_colours=self.v.polyhedron_site_colours,
             polyhedron_opaque_sites=self.v.polyhedron_opaque_sites))
         other.set_orientation(self.v.orientation); other.zoom=self.v.zoom
+        if self.v._scene_updates and self.v._scene_updates.opacity_overrides:
+            other.set_polyhedron_opacities(self.v._scene_updates.opacity_overrides)
         other.pan_x=self.v.pan_x
         other.pan_y=self.v.pan_y
         other.show(); self.app.processEvents()

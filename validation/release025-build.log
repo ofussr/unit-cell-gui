@@ -1,0 +1,155 @@
+* Getting build dependencies for sdist...
+running egg_info
+writing src/unit_cell_gui.egg-info/PKG-INFO
+writing dependency_links to src/unit_cell_gui.egg-info/dependency_links.txt
+writing requirements to src/unit_cell_gui.egg-info/requires.txt
+writing top-level names to src/unit_cell_gui.egg-info/top_level.txt
+reading manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+warning: no previously-included files found matching 'LOCAL_NOTES_*.md'
+adding license file 'LICENSE'
+writing manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+* Building sdist...
+running sdist
+running egg_info
+writing src/unit_cell_gui.egg-info/PKG-INFO
+writing dependency_links to src/unit_cell_gui.egg-info/dependency_links.txt
+writing requirements to src/unit_cell_gui.egg-info/requires.txt
+writing top-level names to src/unit_cell_gui.egg-info/top_level.txt
+reading manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+warning: no previously-included files found matching 'LOCAL_NOTES_*.md'
+adding license file 'LICENSE'
+writing manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+running check
+creating unit_cell_gui-0.2.5
+creating unit_cell_gui-0.2.5/docs
+creating unit_cell_gui-0.2.5/examples
+creating unit_cell_gui-0.2.5/src/unit_cell_gui
+creating unit_cell_gui-0.2.5/src/unit_cell_gui.egg-info
+creating unit_cell_gui-0.2.5/tests
+copying files to unit_cell_gui-0.2.5...
+copying CHANGELOG.md -> unit_cell_gui-0.2.5
+copying CITATION.cff -> unit_cell_gui-0.2.5
+copying LICENSE -> unit_cell_gui-0.2.5
+copying MANIFEST.in -> unit_cell_gui-0.2.5
+copying README.md -> unit_cell_gui-0.2.5
+copying RELEASE_NOTES_0.2.2.md -> unit_cell_gui-0.2.5
+copying RELEASE_NOTES_0.2.3.md -> unit_cell_gui-0.2.5
+copying RELEASE_NOTES_0.2.4.md -> unit_cell_gui-0.2.5
+copying RELEASE_NOTES_0.2.5.md -> unit_cell_gui-0.2.5
+copying THIRD_PARTY_NOTICES.txt -> unit_cell_gui-0.2.5
+copying pyproject.toml -> unit_cell_gui-0.2.5
+copying docs/partial-updates.md -> unit_cell_gui-0.2.5/docs
+copying examples/partial_updates.py -> unit_cell_gui-0.2.5/examples
+copying src/unit_cell_gui/__init__.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/_depth_peeling.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/_scene_updates.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/gl_geometry.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/hatching.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/models.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/opengl_viewer.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/py.typed -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/qt_config.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/render_geometry.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/view_helpers.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui/viewer.py -> unit_cell_gui-0.2.5/src/unit_cell_gui
+copying src/unit_cell_gui.egg-info/PKG-INFO -> unit_cell_gui-0.2.5/src/unit_cell_gui.egg-info
+copying src/unit_cell_gui.egg-info/SOURCES.txt -> unit_cell_gui-0.2.5/src/unit_cell_gui.egg-info
+copying src/unit_cell_gui.egg-info/dependency_links.txt -> unit_cell_gui-0.2.5/src/unit_cell_gui.egg-info
+copying src/unit_cell_gui.egg-info/requires.txt -> unit_cell_gui-0.2.5/src/unit_cell_gui.egg-info
+copying src/unit_cell_gui.egg-info/top_level.txt -> unit_cell_gui-0.2.5/src/unit_cell_gui.egg-info
+copying tests/test_gl_geometry.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_render_geometry.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_unit_cell_gui.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_visibility_cache.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_atom_instancing.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_contact_colours.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_depth_peeling.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_opacities.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_outline_instancing.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_scene_instancing.py -> unit_cell_gui-0.2.5/tests
+copying tests/test_z_updates.py -> unit_cell_gui-0.2.5/tests
+Writing unit_cell_gui-0.2.5/setup.cfg
+Creating tar archive
+removing 'unit_cell_gui-0.2.5' (and everything under it)
+* Building wheel from sdist
+* Getting build dependencies for wheel...
+running egg_info
+writing src/unit_cell_gui.egg-info/PKG-INFO
+writing dependency_links to src/unit_cell_gui.egg-info/dependency_links.txt
+writing requirements to src/unit_cell_gui.egg-info/requires.txt
+writing top-level names to src/unit_cell_gui.egg-info/top_level.txt
+reading manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+warning: no previously-included files found matching 'LOCAL_NOTES_*.md'
+adding license file 'LICENSE'
+writing manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+* Building wheel...
+running bdist_wheel
+running build
+running build_py
+creating build/lib/unit_cell_gui
+copying src/unit_cell_gui/opengl_viewer.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/__init__.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/_depth_peeling.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/_scene_updates.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/viewer.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/gl_geometry.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/render_geometry.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/qt_config.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/view_helpers.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/models.py -> build/lib/unit_cell_gui
+copying src/unit_cell_gui/hatching.py -> build/lib/unit_cell_gui
+running egg_info
+writing src/unit_cell_gui.egg-info/PKG-INFO
+writing dependency_links to src/unit_cell_gui.egg-info/dependency_links.txt
+writing requirements to src/unit_cell_gui.egg-info/requires.txt
+writing top-level names to src/unit_cell_gui.egg-info/top_level.txt
+reading manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+warning: no previously-included files found matching 'LOCAL_NOTES_*.md'
+adding license file 'LICENSE'
+writing manifest file 'src/unit_cell_gui.egg-info/SOURCES.txt'
+copying src/unit_cell_gui/py.typed -> build/lib/unit_cell_gui
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/unit_cell_gui
+copying build/lib/unit_cell_gui/opengl_viewer.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/__init__.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/_depth_peeling.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/_scene_updates.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/viewer.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/gl_geometry.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/render_geometry.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/qt_config.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/view_helpers.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/models.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/py.typed -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+copying build/lib/unit_cell_gui/hatching.py -> build/bdist.linux-x86_64/wheel/./unit_cell_gui
+running install_egg_info
+Copying src/unit_cell_gui.egg-info to build/bdist.linux-x86_64/wheel/./unit_cell_gui-0.2.5-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/unit_cell_gui-0.2.5.dist-info/WHEEL
+creating '/workspace/scratch/a21175bb2262/dist-release025/.tmp-ttd17jtc/unit_cell_gui-0.2.5-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'unit_cell_gui/__init__.py'
+adding 'unit_cell_gui/_depth_peeling.py'
+adding 'unit_cell_gui/_scene_updates.py'
+adding 'unit_cell_gui/gl_geometry.py'
+adding 'unit_cell_gui/hatching.py'
+adding 'unit_cell_gui/models.py'
+adding 'unit_cell_gui/opengl_viewer.py'
+adding 'unit_cell_gui/py.typed'
+adding 'unit_cell_gui/qt_config.py'
+adding 'unit_cell_gui/render_geometry.py'
+adding 'unit_cell_gui/view_helpers.py'
+adding 'unit_cell_gui/viewer.py'
+adding 'unit_cell_gui-0.2.5.dist-info/licenses/LICENSE'
+adding 'unit_cell_gui-0.2.5.dist-info/METADATA'
+adding 'unit_cell_gui-0.2.5.dist-info/WHEEL'
+adding 'unit_cell_gui-0.2.5.dist-info/top_level.txt'
+adding 'unit_cell_gui-0.2.5.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built unit_cell_gui-0.2.5.tar.gz and unit_cell_gui-0.2.5-py3-none-any.whl
