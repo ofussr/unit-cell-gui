@@ -54,8 +54,10 @@ class ContactColourTests(unittest.TestCase):
         self.assertTrue(self.viewer._intersection_dirty)
         self.assert_contacts({0:'#55aadd', 1:'#55aadd', 2:'#55aadd'})
         self.viewer._intersection_dirty = False
+        self.viewer._gpu_dirty = False
         self.viewer.set_style_overrides(StyleOverrides(polyhedron_site_colours={'p0':'#ff0088'}))
-        self.assertTrue(self.viewer._intersection_dirty)
+        self.assertFalse(self.viewer._intersection_dirty)
+        self.assertEqual(self.viewer._pending_sections, {0})
         self.viewer._intersection_dirty = False
         self.viewer.set_style_overrides(StyleOverrides(polyhedron_site_colours={'p0':'#ff0088'},
                                                       polyhedron_opaque_sites={'p0'}))

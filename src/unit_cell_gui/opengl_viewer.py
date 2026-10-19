@@ -20,6 +20,7 @@ from OpenGL.GL import (
     GL_MAX_TEXTURE_BUFFER_SIZE,
     GL_TEXTURE0,
     GL_RGBA32F,
+    GL_R32F,
     GL_INT,
     GL_DYNAMIC_DRAW,
     GL_BLEND,
@@ -94,17 +95,23 @@ from OpenGL.GL import (
     glVertexAttribDivisor,
     glViewport,
 )
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal, QTimer, QEvent
 from PySide6.QtGui import QBrush, QColor, QFontMetrics, QPainter, QPen, QPolygonF
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtWidgets import QSizePolicy
+from PySide6.QtWidgets import QSizePolicy, QMenu
 
 from .gl_geometry import indexed_cylinder_mesh, indexed_sphere_mesh, line_vertices, polygon_triangles
 from .hatching import hatch_division_count
 from .models import DisplayOptions, Scene, StyleOverrides
 from ._scene_updates import SceneView, prepare, same_polyhedron
+from ._transparency_sort import back_to_front, prepare_primitives, material_keys
 from .qt_config import configure_qt_opengl, preferred_surface_format
 from .view_helpers import _polyhedron_hatches, screen_drag_orientation
+from ._numeric import (GPU_MAX, gpu_values, atom_radius, orientation_matrix,
+                       scene_extent, camera_extent, fractions)
+from ._contacts import ContactAtoms, contact_faces, CIRCLE_COS, CIRCLE_SIN
+from ._weighted_oit import WeightedOIT, preserved_state
+
 
 
 # ``viewer.py`` imports this module while normal hosts are still constructing
@@ -147,6 +154,7 @@ class _PolyhedronRange:
     center: np.ndarray | None = None
     poly_index: int | None = None
     buffer_key: str | None = None
+    vertices: np.ndarray | None = None
 
 
 @dataclass
@@ -348,6 +356,8 @@ layout(location = 0) in float a_corner;
 layout(location = 1) in int a_record;
 uniform int u_use_order;
 uniform samplerBuffer u_records;
+uniform samplerBuffer u_poly_opacities;
+uniform int u_poly_opacities_enabled;
 uniform int u_first;
 uniform int u_record_texels;
 uniform mat4 u_projection;
@@ -360,6 +370,10 @@ void main() {
     int base = record * u_record_texels;
     vec3 position = texelFetch(u_records, base + int(a_corner)).xyz;
     v_colour = texelFetch(u_records, base + u_record_texels - 1);
+    if (u_poly_opacities_enabled != 0) {
+        int material = int(texelFetch(u_records, base).w);
+        if (material > 0) v_colour.a = texelFetch(u_poly_opacities, material - 1).r;
+    }
     v_normal = vec3(0.0);
     v_lit = 0.0;
     gl_Position = u_projection * vec4(u_orientation * position, 1.0);
@@ -376,10 +390,12 @@ uniform mat4 u_projection;
 uniform mat3 u_orientation;
 
 out vec4 v_colour;
+uniform float u_opacity;
 
 void main() {
     vec3 camera_position = u_orientation * a_position;
     v_colour = a_colour;
+    v_colour.a *= u_opacity;
     gl_Position = u_projection * vec4(camera_position, 1.0);
 }
 """
@@ -526,13 +542,16 @@ void main() {
 
 def _compile_shader(kind: int, source: str) -> int:
     shader = glCreateShader(kind)
-    glShaderSource(shader, source)
-    glCompileShader(shader)
-    if not glGetShaderiv(shader, GL_COMPILE_STATUS):
-        log = glGetShaderInfoLog(shader).decode("utf-8", errors="replace")
+    try:
+        glShaderSource(shader, source)
+        glCompileShader(shader)
+        if not glGetShaderiv(shader, GL_COMPILE_STATUS):
+            log = glGetShaderInfoLog(shader).decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenGL shader compilation failed:\n{log}")
+        return shader
+    except BaseException:
         glDeleteShader(shader)
-        raise RuntimeError(f"OpenGL shader compilation failed:\n{log}")
-    return shader
+        raise
 
 
 def _create_program(
@@ -540,23 +559,29 @@ def _create_program(
     fragment_source: str = _FRAGMENT_SHADER,
     geometry_source: str | None = None,
 ) -> int:
-    shaders = [
-        _compile_shader(GL_VERTEX_SHADER, vertex_source),
-        _compile_shader(GL_FRAGMENT_SHADER, fragment_source),
-    ]
-    if geometry_source is not None:
-        shaders.append(_compile_shader(GL_GEOMETRY_SHADER, geometry_source))
-    program = glCreateProgram()
-    for shader in shaders:
-        glAttachShader(program, shader)
-    glLinkProgram(program)
-    for shader in shaders:
-        glDeleteShader(shader)
-    if not glGetProgramiv(program, GL_LINK_STATUS):
-        log = glGetProgramInfoLog(program).decode("utf-8", errors="replace")
-        glDeleteProgram(program)
-        raise RuntimeError(f"OpenGL shader linking failed:\n{log}")
-    return program
+    shaders = []
+    program = 0
+    try:
+        for kind, source in ((GL_VERTEX_SHADER, vertex_source),
+                             (GL_FRAGMENT_SHADER, fragment_source),
+                             (GL_GEOMETRY_SHADER, geometry_source)):
+            if source is not None:
+                shaders.append(_compile_shader(kind, source))
+        program = glCreateProgram()
+        for shader in shaders:
+            glAttachShader(program, shader)
+        glLinkProgram(program)
+        if not glGetProgramiv(program, GL_LINK_STATUS):
+            log = glGetProgramInfoLog(program).decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenGL shader linking failed:\n{log}")
+        return program
+    except BaseException:
+        if program:
+            glDeleteProgram(program)
+        raise
+    finally:
+        for shader in shaders:
+            glDeleteShader(shader)
 
 
 def _colour4(colour: QColor, alpha: float = 1.0) -> np.ndarray:
@@ -576,11 +601,14 @@ def _engraving_colour(element: str, colour_value: str) -> QColor:
 
 
 def _blend_components(components) -> QColor:
+    components = tuple(components)
+    weights = [max(0., float(component.occupancy)) for component in components]
+    if max(weights, default=0.) > 1e250/max(1,len(weights)):
+        weights = list(fractions(weights))
     weighted = np.zeros(3, dtype=float)
     total = 0.0
-    for component in components:
+    for component, weight in zip(components, weights):
         colour = QColor(component.colour)
-        weight = max(0.0, float(component.occupancy))
         weighted += weight * np.asarray((colour.red(), colour.green(), colour.blue()))
         total += weight
     if total <= 1e-12:
@@ -601,8 +629,8 @@ def _vertex_block(
     alpha: float = 1.0,
     lit: bool = True,
 ) -> np.ndarray:
-    positions = np.asarray(positions, dtype=np.float32).reshape(-1, 3)
-    normals = np.asarray(normals, dtype=np.float32).reshape(-1, 3)
+    positions = gpu_values(positions, 'generated vertex coordinates').astype(np.float32).reshape(-1, 3)
+    normals = gpu_values(normals, 'generated vertex normals').astype(np.float32).reshape(-1, 3)
     if positions.shape != normals.shape:
         raise ValueError("positions and normals must have matching shapes")
     if positions.shape[0] == 0:
@@ -637,6 +665,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._pending_atoms: set[int] = set()
         self._pending_bonds: set[int] = set()
         self._pending_polyhedra: set[int] = set()
+        self._pending_opacities: set[int] = set()
+        self._poly_opacity_data = np.empty((0,1), np.float32)
+        self._classified_poly_ranges = None
+        self._poly_opacity_vbo = 0
+        self._poly_opacity_texture = 0
         self._pending_sections: set[int] = set()
         self._base_ranges_by_poly: dict[str, dict] = {}
         self._partial_poly_gpu: dict[int, dict] = {}
@@ -665,6 +698,23 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self.hatch_grip = 50
         self.atom_scale = 1.0
         self.rotation_enabled = True
+        self.transparency_supersampling = 1
+        self.weighted_blended_oit_when_rotate = False
+        self.weighted_blended_oit = False
+        self._rotation_drag_active = False
+        self._rotation_drag_changed = False
+        self._external_rotation_active = False
+        self._orientation_source_mouse = False
+        self._awaiting_exact_frame = False
+        self._rotation_timer = QTimer(self)
+        self._rotation_timer.setSingleShot(True)
+        self._rotation_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._rotation_timer.setInterval(150)
+        self._rotation_timer.timeout.connect(self._external_rotation_stopped)
+        self._weighted_oit = None
+        self.weighted_oit_error: str | None = None
+        self._quality_menu = None
+        self._last_frame_wboit = False
         self.empty_text = "No structure is loaded"
         self.title_text = ""
         self.atom_component_visibility: dict[str, bool] = {}
@@ -690,9 +740,26 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._edge_uniform_viewport = -1
         self._edge_uniform_width = -1
         self._edge_uniform_depth_bias = -1
+        self._edge_uniform_opacity = -1
         self.opengl_error: str | None = None
         self._cleanup_context = None
         self._cleaning_up = False
+        self._transparent_order_key = None
+        self._transparent_order = []
+        self._transparency_sort_conflicts = 0
+        self._transparent_prepared = None
+        self._transparent_prepared_key = None
+        self._transparent_geometry_key = None
+        self._transparency_sort_stats = {}
+        self._sort_material_revision = 0
+        self._sort_geometry_revision = 0
+        self._contact_atoms = None
+        self._contact_face_cache = {}
+        self._pending_contact_atoms = set()
+        self._legend_entries_cache = None
+        self._scene_storage_pending_clear = False
+        self._gpu_extent = np.zeros(3)
+        self._poly_indices_by_site = {}
 
         self._atom_vao = 0
         self._atom_vbo = 0
@@ -803,6 +870,15 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         """Return independently owned copies of effective polyhedra."""
         return tuple(replace(poly) for poly in self._display_scene.polyhedra) if self.scene is not None else ()
 
+    def get_polyhedron_opacities(self) -> np.ndarray:
+        """Independent effective material opacities, separate from visibility."""
+        return np.asarray([self._polyhedron_opacity(i) for i in range(len(self.scene.polyhedra))],
+                          dtype=float) if self.scene is not None else np.empty(0, float)
+
+    def set_polyhedron_opacities(self, opacities) -> None:
+        """Set indexed opacities in [0,1]; None restores a per-object default."""
+        self.update_scene(polyhedron_opacities=opacities)
+
     def set_atom_positions(self, positions) -> None:
         self.update_scene(atom_positions=positions)
 
@@ -812,7 +888,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def update_polyhedra(self, polyhedra) -> None:
         self.update_scene(polyhedra=polyhedra)
 
-    def update_scene(self, *, atom_positions=None, atom_visibility=None, polyhedra=None) -> None:
+    def update_scene(self, *, atom_positions=None, atom_visibility=None, polyhedra=None, polyhedron_opacities=None) -> None:
         """Atomically merge indexed overrides, without replacing Scene or camera.
 
         Only supplied indices change. Positions are absolute Cartesian XYZ.
@@ -820,19 +896,49 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         deferred to the next paint with the viewer's context current.
         """
         if self.scene is None:
-            if atom_positions is None and atom_visibility is None and polyhedra is None:
+            if atom_positions is None and atom_visibility is None and polyhedra is None and polyhedron_opacities is None:
                 return
             raise RuntimeError('set_scene() must precede partial updates')
-        positions, visibility, polys = prepare(self.scene, atom_positions, atom_visibility, polyhedra)
+        positions, visibility, polys, opacities = prepare(self.scene, atom_positions, atom_visibility, polyhedra, polyhedron_opacities)
         effective = self._display_scene
+        extent = self._gpu_extent
+        if positions or polys:
+            extent = extent.copy()
+            for index, value in positions.items():
+                bound = np.abs(value) + self._atom_radius(self.scene.atoms[index]) + .012*self.scene.base_radius
+                if len(self.scene.bonds):
+                    bound = np.maximum(bound, np.abs(value) + max(.018,.020*self.scene.base_radius)/3.)
+                extent = np.maximum(extent, bound)
+            for poly in polys.values():
+                if len(poly.vertices):
+                    extent = np.maximum(extent, np.max(np.abs(poly.vertices), axis=0)
+                                        + max(1e-4,.001*self.scene.base_radius))
+            gpu_values(extent, 'generated updated coordinates/radii')
+            camera_extent(extent, self.orientation, self.scene.base_radius)
         positions = {i: value for i, value in positions.items() if not np.array_equal(value, effective.atom_centers[i])}
         visibility = {i: value for i, value in visibility.items() if value != self._locally_visible(i)}
         polys = {i: value for i, value in polys.items() if not same_polyhedron(value, effective.polyhedra[i])}
-        if not positions and not visibility and not polys:
+        current_opacities = self._scene_updates.opacity_overrides if self._scene_updates else {}
+        opacities = {i: value for i, value in opacities.items() if current_opacities.get(i) != value}
+        if not positions and not visibility and not polys and not opacities:
             return
         if self._scene_updates is None:
             self._scene_updates = SceneView(self.scene)
         view = self._scene_updates
+        self._gpu_extent = extent
+        if positions:
+            view.writable_positions()
+        if polys:
+            view.writable_polyhedra()
+        for index, value in opacities.items():
+            if value is None:
+                view.opacity_overrides.pop(index, None)
+            else:
+                view.opacity_overrides[index] = value
+        if opacities:
+            self._classified_poly_ranges = None
+            self._hatch_dirty = True
+        self._pending_opacities.update(set(opacities) | set(polys))
         atoms = set(positions) | set(visibility)
         points = []
         for index in atoms:
@@ -854,6 +960,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             else:
                 view.visibility_overrides[index] = False
         for index, value in polys.items():
+            old_key = view.polyhedra[index].site_key
+            self._poly_indices_by_site.get(old_key, set()).discard(index)
+            self._poly_indices_by_site.setdefault(value.site_key, set()).add(index)
             if same_polyhedron(value, self.scene.polyhedra[index]):
                 view.polyhedron_overrides.pop(index, None)
                 view.polyhedra[index] = self.scene.polyhedra[index]
@@ -864,11 +973,16 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 if key[0] == index:
                     del self._poly_face_mesh_cache[key]
             self._hatch_mesh_cache.pop(index, None)
+            self._contact_face_cache.pop(index, None)
             self._poly_revisions[index] = self._poly_revisions.get(index, 0) + 1
         if polys:
+            self._sort_geometry_revision += 1
             view.update_bounds(polys)
             self._hatch_dirty = True
         self._pending_atoms.update(atoms)
+        self._pending_contact_atoms.update(atoms)
+        if visibility:
+            self._legend_entries_cache = None
         self._pending_polyhedra.update(polys)
         self._pending_sections.update(polys)
         self.update()
@@ -880,8 +994,10 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             return
         self.update_scene(atom_positions={i: self.scene.atom_centers[i] for i in view.position_overrides},
                           atom_visibility={i: True for i in view.visibility_overrides},
-                          polyhedra={i: self.scene.polyhedra[i] for i in view.polyhedron_overrides})
+                          polyhedra={i: self.scene.polyhedra[i] for i in view.polyhedron_overrides},
+                          polyhedron_opacities={i: None for i in view.opacity_overrides})
         self._scene_updates = None
+        self._gpu_extent = scene_extent(self.scene, self.atom_scale)
 
     def sizeHint(self) -> QSize:
         return QSize(760, 620)
@@ -899,24 +1015,49 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._intersection_dirty = True
         self._hatch_dirty = True
         self._atom_outline_dirty = True
+        self._sort_geometry_revision += 1
+        self._contact_atoms = None
+        self._pending_contact_atoms.clear()
+        self._legend_entries_cache = None
         self.update()
 
     def _clear_mesh_caches(self) -> None:
         self._poly_face_mesh_cache.clear()
+        self._contact_face_cache.clear()
         self._hatch_mesh_cache.clear()
         self._hatch_view_key = None
+        self._transparent_order_key = None
+        self._transparent_order = []
+        self._transparency_sort_conflicts = 0
+        self._transparent_prepared = None
+        self._transparent_prepared_key = None
+        self._transparent_geometry_key = None
+        self._transparency_sort_stats = {}
 
     def set_scene(self, scene: Scene | None, *, reset_camera: bool = True) -> None:
         if scene is not None and not isinstance(scene, Scene):
             raise TypeError("scene must be a unit_cell_gui.Scene or None")
+        extent = scene_extent(scene, self.atom_scale) if scene is not None else np.zeros(3)
+        camera_extent(extent, self.orientation, scene.base_radius if scene is not None else None)
         self.scene = scene
+        self._gpu_extent = extent
+        self._poly_indices_by_site = {}
+        if scene is not None:
+            for index, poly in enumerate(scene.polyhedra):
+                self._poly_indices_by_site.setdefault(poly.site_key, set()).add(index)
         self._scene_updates = None
         self._pending_atoms.clear(); self._pending_bonds.clear()
         self._pending_polyhedra.clear(); self._pending_sections.clear()
+        self._pending_opacities.clear()
+        self._classified_poly_ranges = None
         self._poly_revisions.clear()
         self._atom_gpu_rows.clear(); self._outline_gpu_rows.clear(); self._bond_gpu_rows.clear()
         self._clear_mesh_caches()
         self._hatch_buffers_need_clear = True
+        if scene is None:
+            self._stop_camera_motion()
+            self._clear_scene_cpu_data()
+            self._scene_storage_pending_clear = True
         if reset_camera:
             self.zoom = 1.0
             self.pan_x = 0.0
@@ -924,10 +1065,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._mark_gpu_dirty()
 
     def set_orientation(self, orientation: np.ndarray, *, emit: bool = False) -> None:
-        matrix = np.asarray(orientation, dtype=float).reshape(3, 3).copy()
-        if not np.all(np.isfinite(matrix)):
-            raise ValueError("orientation must contain finite values")
+        matrix = orientation_matrix(orientation)
+        camera_extent(self._gpu_extent, matrix, self.scene.base_radius if self.scene is not None else None)
+        changed = not np.array_equal(np.asarray(self.orientation, np.float32), np.asarray(matrix, np.float32))
         self.orientation = matrix
+        if changed:
+            self._note_orientation_change()
         self._hatch_dirty = True
         self.update()
         if emit:
@@ -943,13 +1086,42 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             raise TypeError(f"Unknown display options: {', '.join(sorted(unknown))}")
         values.update(changes)
         normalized = DisplayOptions(**values)
+        extent = self._gpu_extent
+        if normalized.atom_scale != self.atom_scale and self._display_scene is not None:
+            extent = scene_extent(self._display_scene, normalized.atom_scale)
+            camera_extent(extent, self.orientation, self._display_scene.base_radius)
         old = {name: getattr(self, name) for name in DisplayOptions.__dataclass_fields__}
         for name in DisplayOptions.__dataclass_fields__:
             setattr(self, name, getattr(normalized, name))
+        if self._quality_menu is not None:
+            for action, name in zip(self._quality_menu.actions(),
+                    ('weighted_blended_oit_when_rotate', 'weighted_blended_oit')):
+                blocked = action.blockSignals(True)
+                action.setChecked(getattr(self, name))
+                action.blockSignals(blocked)
         changed = {name for name in old if old[name] != getattr(self, name)}
+        if self.engraving:
+            self._stop_camera_motion()
+        elif self.weighted_blended_oit:
+            self._rotation_timer.stop()
+            self._external_rotation_active = False
+            self._awaiting_exact_frame = False
+        elif not self.weighted_blended_oit_when_rotate:
+            self._stop_camera_motion()
+        elif 'weighted_blended_oit' in changed:
+            self._awaiting_exact_frame = self._last_frame_wboit
+        if 'rotation_enabled' in changed and not self.rotation_enabled:
+            self._finish_mouse_rotation()
+        self._gpu_extent = extent
         if not changed:
             self.update()
             return
+
+        if changed & {'show_external_atoms', 'atom_scale'}:
+            self._contact_atoms = None
+            self._pending_contact_atoms.clear()
+        if changed & {'show_atoms', 'show_external_atoms', 'engraving'}:
+            self._legend_entries_cache = None
 
         # Overlay / interaction-only switches must never rebuild millions of
         # sphere/cylinder vertices.
@@ -958,6 +1130,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if "show_atoms" in changed:
             self._atom_outline_dirty = True
         if "engraving" in changed:
+            self._sort_geometry_revision += 1
             self._gpu_dirty = True
             self._intersection_dirty = True
         if changed & {"engraving", "show_external_atoms"}:
@@ -997,10 +1170,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         atom_colours_changed = new_atom_colours != self.atom_component_colours
         poly_visibility_changed = new_poly_visibility != self.polyhedron_site_visibility
         poly_colours_changed = new_poly_colours != self.polyhedron_site_colours
-        poly_style_changed = (
-            poly_colours_changed
-            or new_poly_opaque != self.polyhedron_opaque_sites
-        )
+        colour_keys = {key for key in set(new_poly_colours) | set(self.polyhedron_site_colours)
+                       if new_poly_colours.get(key) != self.polyhedron_site_colours.get(key)}
+        opaque_keys = new_poly_opaque ^ self.polyhedron_opaque_sites
+        changed_polyhedra = set().union(*(self._poly_indices_by_site.get(key, set())
+                                         for key in colour_keys | opaque_keys))
 
         self.atom_component_visibility = new_atom_visibility
         self.atom_component_colours = new_atom_colours
@@ -1014,10 +1188,20 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._atom_outline_dirty = True
         if atom_visibility_changed:
             self._intersection_dirty = True
+            self._contact_atoms = None
+            self._pending_contact_atoms.clear()
+        if atom_visibility_changed or atom_colours_changed:
+            self._legend_entries_cache = None
         if poly_colours_changed:
-            self._intersection_dirty = True
-        if poly_style_changed:
-            self._gpu_dirty = True
+            self._sort_material_revision += 1
+        if changed_polyhedra:
+            self._classified_poly_ranges = None
+            self._hatch_dirty = True
+            if not self._gpu_dirty:
+                self._pending_polyhedra.update(changed_polyhedra)
+                self._pending_opacities.update(changed_polyhedra)
+                self._pending_sections.update(set().union(*(
+                    self._poly_indices_by_site.get(key, set()) for key in colour_keys)))
         if poly_visibility_changed:
             # Face/edge/intersection buffers contain all polyhedra. Visibility
             # is applied at draw time, without changing their vertex data.
@@ -1027,7 +1211,16 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self.update()
 
     def zoom_by(self, steps: float) -> None:
-        self.zoom = float(np.clip(self.zoom * (1.12 ** float(steps)), 0.25, 4.5))
+        steps = float(steps)
+        if not math.isfinite(steps):
+            raise ValueError('zoom steps must be finite')
+        # Saturate extreme inputs without changing ordinary zoom arithmetic.
+        if steps > math.log(4.5/self.zoom)/math.log(1.12):
+            self.zoom = 4.5
+        elif steps < math.log(.25/self.zoom)/math.log(1.12):
+            self.zoom = .25
+        else:
+            self.zoom = float(np.clip(self.zoom*(1.12**steps),.25,4.5))
         self._hatch_dirty = True
         self.update()
 
@@ -1044,14 +1237,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         return any(self._component_visible(component) for component in atom.components)
 
     def _atom_radius(self, atom) -> float:
-        weighted = 0.0
-        total = 0.0
-        for component in atom.components:
-            occupancy = max(0.0, float(component.occupancy))
-            weighted += occupancy * float(component.radius)
-            total += occupancy
-        radius = weighted / total if total > 1e-12 else 0.22
-        return radius * self.atom_scale
+        return atom_radius(atom, self.atom_scale)
 
     def _mixed_atom_colour(self, atom) -> QColor:
         components = [
@@ -1059,13 +1245,16 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             for component in atom.components
             if self._component_visible(component) and component.occupancy > 0.0
         ]
-        total = sum(float(component.occupancy) for component in components)
+        weights = [float(component.occupancy) for component in components]
+        if max(weights, default=0.) > 1e250/max(1,len(weights)):
+            weights = list(fractions(weights))
+        total = sum(weights)
         if total <= 1e-12:
             return QColor("#8b8b8b")
         channels = np.zeros(3, dtype=float)
-        for component in components:
+        for component, weight in zip(components, weights):
             colour = self._component_colour(component)
-            channels += float(component.occupancy) * np.asarray(
+            channels += weight * np.asarray(
                 (colour.red(), colour.green(), colour.blue()), dtype=float
             )
         red, green, blue = np.clip(np.rint(channels / total), 0, 255).astype(int)
@@ -1141,11 +1330,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             cumulative[:] = 1.0
             return colours, cumulative
 
-        total = sum(item[0] for item in raw)
-        scale = 1.0 / total if total > 1.0 else 1.0
+        amounts = fractions(item[0] for item in raw)
         slots: list[tuple[float, np.ndarray]] = []
-        for occupancy, rgb in raw:
-            amount = occupancy * scale
+        for amount, (_occupancy, rgb) in zip(amounts, raw):
             if len(slots) < _ATOM_MAX_COMPONENTS:
                 slots.append((amount, rgb))
             else:
@@ -1273,6 +1460,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
     @staticmethod
     def _upload_static(vao: int, vbo: int, vertices: np.ndarray) -> int:
+        if not np.all(np.isfinite(vertices)) or np.any(np.abs(vertices) > GPU_MAX):
+            raise ValueError('generated GPU records must be finite and float32-representable')
         vertices = np.ascontiguousarray(vertices, dtype=np.float32)
         glBindVertexArray(vao)
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
@@ -1385,11 +1574,13 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 _PRIMITIVE_VERTEX_SHADER, _EDGE_FRAGMENT_SHADER, _EDGE_GEOMETRY_SHADER,
             )
             uniform_names = ('u_projection', 'u_orientation', 'u_light_dir', 'u_records',
-                             'u_first', 'u_record_texels', 'u_use_order', 'u_viewport', 'u_edge_width', 'u_depth_bias')
+                             'u_first', 'u_record_texels', 'u_use_order', 'u_viewport', 'u_edge_width', 'u_depth_bias', 'u_poly_opacities', 'u_poly_opacities_enabled')
             self._instance_uniforms = {
                 program: {name: glGetUniformLocation(program, name) for name in uniform_names}
                 for program in (self._bond_program, self._triangle_program, self._segment_program)
             }
+            self._poly_opacity_vbo = int(glGenBuffers(1))
+            self._poly_opacity_texture = int(glGenTextures(1))
             self._primitive_mesh_vbo = int(glGenBuffers(1))
             glBindBuffer(GL_ARRAY_BUFFER, self._primitive_mesh_vbo)
             corners = np.array([0., 1., 2.], dtype=np.float32)
@@ -1415,6 +1606,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._edge_uniform_viewport = glGetUniformLocation(self._edge_program, "u_viewport")
             self._edge_uniform_width = glGetUniformLocation(self._edge_program, "u_edge_width")
             self._edge_uniform_depth_bias = glGetUniformLocation(self._edge_program, "u_depth_bias")
+            self._edge_uniform_opacity = glGetUniformLocation(self._edge_program, "u_opacity")
             self._restore_render_state()
             self._gpu_dirty = True
             self._atom_dirty = True
@@ -1504,7 +1696,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
     @staticmethod
     def _triangle_instances(positions: np.ndarray, colour: QColor, alpha: float) -> np.ndarray:
-        triangles = np.asarray(positions, dtype=np.float32).reshape(-1, 3, 3)
+        triangles = gpu_values(positions, 'generated triangle coordinates').astype(np.float32).reshape(-1, 3, 3)
         records = np.zeros((len(triangles), _TRIANGLE_INSTANCE_FLOATS), dtype=np.float32)
         for corner in range(3):
             records[:, corner * 4:corner * 4 + 3] = triangles[:, corner]
@@ -1514,7 +1706,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     @staticmethod
     def _segment_instance(first, second, colour: QColor, alpha: float = 1.0) -> np.ndarray:
         record = np.zeros((1, _SEGMENT_INSTANCE_FLOATS), dtype=np.float32)
-        record[0, :3], record[0, 4:7] = first, second
+        record[0, :3], record[0, 4:7] = gpu_values(first, 'generated edge'), gpu_values(second, 'generated edge')
         record[0, 8:12] = _colour4(colour, alpha)
         return record
 
@@ -1528,6 +1720,18 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         return QColor(self.polyhedron_site_colours.get(
             polyhedron.site_key, _blend_components(polyhedron.components).name(),
         ))
+
+    def _polyhedron_opacity(self, index, *, use_local=True) -> float:
+        poly = self._display_scene.polyhedra[index]
+        value = self._scene_updates.opacity_overrides.get(index) if self._scene_updates and use_local else None
+        if self.engraving:
+            return 0.0 if value == 0 else 1.0
+        if value is not None:
+            return value
+        if poly.site_key in self.polyhedron_opaque_sites:
+            return 1.0
+        occupancy = min(1.0, sum(max(0.0, float(c.occupancy)) for c in poly.components))
+        return 0.28 + 0.36 * occupancy
 
     def _build_static_geometry(self, *, poly_indices=None, include_cell=True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[_PolyhedronRange], np.ndarray, list[_PolyhedronRange], list[_PolyhedronRange]]:
         if self._display_scene is None:
@@ -1561,14 +1765,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             edge_lift = max(1.0e-4, 8.0e-4 * float(self._display_scene.base_radius))
             for poly_index in (range(len(self._display_scene.polyhedra)) if poly_indices is None else poly_indices):
                 polyhedron = self._display_scene.polyhedra[poly_index]
-                opaque_first = opaque_offset
                 colour = self._polyhedron_colour(polyhedron)
-                occupancy = min(
-                    1.0,
-                    sum(max(0.0, float(component.occupancy)) for component in polyhedron.components),
-                )
-                opaque = self.engraving or (polyhedron.site_key in self.polyhedron_opaque_sites)
-                alpha = 1.0 if opaque else (0.28 + 0.36 * occupancy)
+                # Geometry always keeps its host/default material. Indexed
+                # overrides live only in the table, so removing the last one
+                # can disable the extra vertex fetch without rewriting meshes.
+                alpha = self._polyhedron_opacity(poly_index, use_local=False)
+                opaque = alpha == 1
                 edge_colour = QColor(20, 20, 20) if self.engraving else _polyhedron_edge_colour(colour)
                 poly_center = np.asarray(polyhedron.center, dtype=float)
                 edge_faces: dict[tuple[int, int], list[np.ndarray]] = {}
@@ -1577,13 +1779,18 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                         poly_index, face_index, polyhedron, face
                     )
                     block = self._triangle_instances(positions, colour, alpha)
+                    block[:,3] = poly_index + 1
                     if opaque:
                         opaque_blocks.append(block)
+                        opaque_ranges.append(_PolyhedronRange(
+                            polyhedron.site_key,opaque_offset,block.shape[0],world.mean(axis=0),
+                            poly_index,vertices=world))
                         opaque_offset += block.shape[0]
                     else:
                         face_blocks.append(block)
                         face_ranges.append(_PolyhedronRange(
-                            polyhedron.site_key, transparent_offset, block.shape[0], world.mean(axis=0), poly_index
+                            polyhedron.site_key, transparent_offset, block.shape[0], world.mean(axis=0), poly_index,
+                            vertices=world
                         ))
                         transparent_offset += block.shape[0]
 
@@ -1616,20 +1823,23 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                         outward = outward / outward_length * edge_lift
                     else:
                         outward = np.zeros(3, dtype=float)
+                    # In colour mode faces/edges share the painter's order.
+                    # A world-space lift would push a shared edge into the
+                    # neighbouring polyhedron. Engraving retains its existing
+                    # lifted, depth-tested ink geometry.
+                    lift = outward if self.engraving else np.zeros(3)
                     edge_block = self._segment_instance(
-                        first_point + outward, second_point + outward, edge_colour,
+                        first_point + lift, second_point + lift, edge_colour,
                         alpha=1.0 if self.engraving else alpha,
                     )
+                    edge_block[:,3] = poly_index + 1
                     face_edge_blocks.append(edge_block)
                     midpoint = 0.5 * (first_point + second_point)
                     face_edge_ranges.append(_PolyhedronRange(
-                        polyhedron.site_key, transparent_edge_offset, edge_block.shape[0], midpoint, poly_index
+                        polyhedron.site_key, transparent_edge_offset, edge_block.shape[0], midpoint, poly_index,
+                        vertices=np.stack((first_point+lift,second_point+lift))
                     ))
                     transparent_edge_offset += edge_block.shape[0]
-                if opaque_offset > opaque_first:
-                    opaque_ranges.append(_PolyhedronRange(
-                        polyhedron.site_key, opaque_first, opaque_offset - opaque_first, poly_index=poly_index
-                    ))
 
         return (
             np.empty((0, _ATOM_INSTANCE_FLOATS), dtype=np.float32),
@@ -1650,6 +1860,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             (index, float((self.orientation @ polyhedron.center)[2]))
             for index, polyhedron in enumerate(self._display_scene.polyhedra)
             if self.polyhedron_site_visibility.get(polyhedron.site_key, True)
+            and self._polyhedron_opacity(index) > 0
         ]
         if not selected:
             return []
@@ -1832,6 +2043,16 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         sides = np.cross(edges[None, :, :], points[:, None, :] - poly[None, :, :]) @ normal
         return np.all(sides >= -tolerance, axis=1) | np.all(sides <= tolerance, axis=1)
 
+    def _get_contact_atoms(self):
+        visible = lambda i: self._global_atom_visible(i) and self._locally_visible(i)
+        if self._contact_atoms is None:
+            self._contact_atoms = ContactAtoms(self._display_scene, self._atom_radius, visible)
+        elif self._pending_contact_atoms:
+            self._contact_atoms.update(self._pending_contact_atoms, self._display_scene,
+                                       self._atom_radius, visible)
+        self._pending_contact_atoms.clear()
+        return self._contact_atoms
+
     def _build_atom_face_intersection_geometry(self, *, poly_indices=None) -> tuple[np.ndarray, list[_PolyhedronRange]]:
         """Build the actual sphere/face intersection curves.
 
@@ -1846,24 +2067,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         blocks: list[np.ndarray] = []
         ranges: list[_PolyhedronRange] = []
         offset = 0
-        samples = 160
-        angles = [2.0 * math.pi * index / samples for index in range(samples)]
-        circle_cos = np.asarray([math.cos(angle) for angle in angles])[:, None]
-        circle_sin = np.asarray([math.sin(angle) for angle in angles])[:, None]
-        visible_atoms = [
-            (
-                atom,
-                np.asarray(center, dtype=float),
-                self._atom_radius(atom),
-            )
-            for atom_index, (atom, center) in enumerate(zip(self._display_scene.atoms, self._display_scene.atom_centers))
-            if self._atom_visible(atom) and self._locally_visible(atom_index)
-            and (self.show_external_atoms or not atom.external)
-        ]
-        if not visible_atoms:
+        circle_cos, circle_sin = CIRCLE_COS, CIRCLE_SIN
+        atoms = self._get_contact_atoms()
+        atom_centres, atom_radii = atoms.centres, atoms.radii
+        if not atoms.visible_count:
             return np.empty((0, _VERTEX_FLOATS), dtype=np.float32), []
-        atom_centres = np.asarray([item[1] for item in visible_atoms], dtype=float)
-        atom_radii = np.asarray([item[2] for item in visible_atoms], dtype=float)
 
         for poly_index in (range(len(self._display_scene.polyhedra)) if poly_indices is None else poly_indices):
             polyhedron = self._display_scene.polyhedra[poly_index]
@@ -1871,47 +2079,19 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             # colour overrides. Engraving keeps the existing black ink.
             colour = QColor(20, 20, 20) if self.engraving else self._polyhedron_colour(polyhedron)
             poly_first = offset
-            vertices = np.asarray(polyhedron.vertices, dtype=float)
-            poly_center = np.asarray(polyhedron.center, dtype=float)
-            for face in polyhedron.faces:
-                polygon = vertices[list(face)]
-                if len(polygon) < 3:
-                    continue
-                normal = np.cross(polygon[1] - polygon[0], polygon[2] - polygon[0])
-                normal_length = float(np.linalg.norm(normal))
-                if normal_length <= 1.0e-12:
-                    continue
-                normal /= normal_length
-                face_center = polygon.mean(axis=0)
-                if float(np.dot(normal, face_center - poly_center)) < 0.0:
-                    normal = -normal
-
-                # Stable basis in the face plane for the section circle.
-                u = polygon[1] - polygon[0]
-                u -= float(np.dot(u, normal)) * normal
-                u_length = float(np.linalg.norm(u))
-                if u_length <= 1.0e-12:
-                    continue
-                u /= u_length
-                v = np.cross(normal, u)
-                v_length = float(np.linalg.norm(v))
-                if v_length <= 1.0e-12:
-                    continue
-                v /= v_length
-
-                # Cheap vectorised broad phase: almost every atom is far from
-                # a given face in a real structure, so do not enter Python for
-                # every atom×face pair.
-                signed_all = (atom_centres - polygon[0]) @ normal
-                bbox_min = polygon.min(axis=0)
-                bbox_max = polygon.max(axis=0)
-                in_box = np.all(atom_centres >= bbox_min - atom_radii[:, None], axis=1) & np.all(
-                    atom_centres <= bbox_max + atom_radii[:, None], axis=1
-                )
-                candidate_indices = np.nonzero((np.abs(signed_all) < atom_radii - 1.0e-8) & in_box)[0]
-                for atom_index in candidate_indices:
-                    _atom, atom_center, atom_radius = visible_atoms[int(atom_index)]
-                    signed_distance = float(signed_all[int(atom_index)])
+            if poly_index not in self._contact_face_cache:
+                self._contact_face_cache[poly_index] = contact_faces(polyhedron)
+            for frame in self._contact_face_cache[poly_index]:
+                polygon,normal,u,v = frame.polygon,frame.normal,frame.u,frame.v
+                bbox_min,bbox_max = frame.low,frame.high
+                candidates = atoms.near_face(bbox_min, bbox_max)
+                signed = (atom_centres[candidates] - polygon[0]) @ normal
+                in_box = np.all(atom_centres[candidates] >= bbox_min-atom_radii[candidates,None], axis=1)
+                in_box &= np.all(atom_centres[candidates] <= bbox_max+atom_radii[candidates,None], axis=1)
+                valid = in_box & (np.abs(signed) < atom_radii[candidates]-1e-8)
+                for atom_index, signed_distance in zip(candidates[valid], signed[valid]):
+                    atom_center, atom_radius = atom_centres[atom_index], atom_radii[atom_index]
+                    signed_distance = float(signed_distance)
                     circle_radius_sq = atom_radius * atom_radius - signed_distance * signed_distance
                     if circle_radius_sq <= 1.0e-12:
                         continue
@@ -1920,7 +2100,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
                     points = circle_center + circle_radius * (circle_cos * u + circle_sin * v)
                     following = np.roll(points, -1, axis=0)
-                    inside = self._points_in_convex_face(0.5 * (points + following), polygon, normal)
+                    inside = frame.contains(0.5 * (points + following))
                     if np.any(inside):
                         positions = np.stack((points[inside], following[inside]), axis=1).reshape(-1, 3)
                         block = _vertex_block(
@@ -1981,6 +2161,18 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._face_edge_count = self._upload_primitive('_face_edge', face_edges)
         self._face_edge_ranges = face_edge_ranges
         self._face_edge_order_records = None
+        self._classified_poly_ranges = None
+        self._poly_opacity_data = self.get_polyhedron_opacities().astype(np.float32).reshape(-1,1)
+        if self._poly_opacity_vbo:
+            glBindBuffer(GL_ARRAY_BUFFER, self._poly_opacity_vbo)
+            records = self._poly_opacity_data if len(self._poly_opacity_data) else np.ones((1,1),np.float32)
+            glBufferData(GL_ARRAY_BUFFER, records.nbytes, records, GL_DYNAMIC_DRAW)
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
+            glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, self._poly_opacity_vbo)
+            glBindTexture(GL_TEXTURE_BUFFER, 0)
+            glBindBuffer(GL_ARRAY_BUFFER, 0)
+        self._pending_opacities.clear()
         self._gpu_dirty = False
         self._pending_polyhedra.clear()
 
@@ -2072,6 +2264,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBindBuffer(GL_ARRAY_BUFFER, vbo)
         for first, finish in self._row_runs(rows):
             block = np.ascontiguousarray(data[first:finish])
+            if not np.all(np.isfinite(block)):
+                raise ValueError('updated GPU records must be finite')
             glBufferSubData(GL_ARRAY_BUFFER, first * data.shape[1] * 4, block.nbytes, block)
         glBindBuffer(GL_ARRAY_BUFFER, 0)
 
@@ -2125,6 +2319,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._partial_section_gpu.clear()
 
     def _update_one_polyhedron_gpu(self, index) -> None:
+        self._classified_poly_ranges = None
         geometry = self._build_static_geometry(poly_indices=(index,), include_cell=False)
         data = self._partial_poly_gpu.setdefault(index, {'prefixes': []})
         for kind, array, ranges in (('opaque', geometry[1], geometry[7]),
@@ -2150,7 +2345,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         else:
             buffer.count = self._upload_static(buffer.vao, buffer.vbo, records)
 
-    def _effective_ranges(self, kind) -> list[_PolyhedronRange]:
+    def _stored_ranges(self, kind) -> list[_PolyhedronRange]:
         base = getattr(self, {'opaque': '_opaque_ranges', 'face': '_face_ranges',
                               'face_edge': '_face_edge_ranges', 'section': '_intersection_ranges'}[kind])
         overrides = self._partial_section_gpu if kind == 'section' else self._partial_poly_gpu
@@ -2175,7 +2370,31 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 result.extend(overrides[index].get(kind, []))
         return result
 
+    def _effective_ranges(self, kind) -> list[_PolyhedronRange]:
+        if kind not in ('opaque','face'):
+            return self._stored_ranges(kind)
+        if self._classified_poly_ranges is None:
+            classified = {'opaque': [], 'face': []}
+            for source in ('opaque','face'):
+                for item in self._stored_ranges(source):
+                    opacity = self._polyhedron_opacity(item.poly_index)
+                    if opacity <= 0:
+                        continue
+                    target = 'opaque' if opacity == 1 else 'face'
+                    if source != target and not item.buffer_key:
+                        item = replace(item, buffer_key='_opaque' if source == 'opaque' else '_face')
+                    classified[target].append(item)
+            self._classified_poly_ranges = classified
+        return self._classified_poly_ranges[kind]
+
     def _flush_scene_updates(self) -> None:
+        opacity_rows = sorted(self._pending_opacities)
+        for index in opacity_rows:
+            if index < len(self._poly_opacity_data):
+                self._poly_opacity_data[index,0] = self._polyhedron_opacity(index)
+        if opacity_rows and self._poly_opacity_vbo:
+            self._patch_rows(self._poly_opacity_vbo, self._poly_opacity_data, opacity_rows)
+        self._pending_opacities.clear()
         for mapping, data, vbo in ((self._atom_gpu_rows, self._atom_instance_data, self._atom_vbo),
                                     (self._outline_gpu_rows, self._outline_instance_data, self._atom_outline_vbo)):
             rows = []
@@ -2251,6 +2470,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         )
         glUniform1f(self._edge_uniform_width, float(width_px) * device_ratio)
         glUniform1f(self._edge_uniform_depth_bias, float(depth_bias))
+        glUniform1f(self._edge_uniform_opacity, 1.0)
 
     def _set_instance_uniforms(self, program: int, record_texels: int = 0,
                                *, width_px: float = 1.575, depth_bias: float = 1e-5) -> None:
@@ -2265,12 +2485,20 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             glUniform1i(uniforms['u_use_order'], 0)
             glUniform1i(uniforms['u_records'], 0)
             glUniform1i(uniforms['u_record_texels'], record_texels)
-            if program == self._segment_program:
-                ratio = max(1., float(self.devicePixelRatioF()))
-                glUniform2f(uniforms['u_viewport'], max(1., self.width() * ratio),
-                            max(1., self.height() * ratio))
-                glUniform1f(uniforms['u_edge_width'], width_px * ratio)
-                glUniform1f(uniforms['u_depth_bias'], depth_bias)
+            glUniform1i(uniforms['u_poly_opacities'], 3)
+            enabled = bool(self._scene_updates and self._scene_updates.opacity_overrides)
+            glUniform1i(uniforms['u_poly_opacities_enabled'], int(enabled))
+            if enabled:
+                glActiveTexture(GL_TEXTURE0 + 3)
+                glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
+                glActiveTexture(GL_TEXTURE0)
+        if program == self._segment_program or (self._weighted_oit is not None
+                                                and program == self._weighted_oit.segment_program):
+            ratio = max(1., float(self.devicePixelRatioF()))
+            glUniform2f(uniforms['u_viewport'], max(1., self.width() * ratio),
+                        max(1., self.height() * ratio))
+            glUniform1f(uniforms['u_edge_width'], width_px * ratio)
+            glUniform1f(uniforms['u_depth_bias'], depth_bias)
 
     def _bind_primitive(self, vao: int, texture: int) -> None:
         glBindVertexArray(vao)
@@ -2281,8 +2509,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             (chunks for chunks in self._primitive_chunks.values() if chunks and chunks[0][1] == texture), []
         )
 
-    def _draw_primitive_instances(self, mode: int, first: int, count: int) -> None:
-        program = self._triangle_program if mode == GL_TRIANGLES else self._segment_program
+    def _draw_primitive_instances(self, mode: int, first: int, count: int, *, program=None) -> None:
+        program = program or (self._triangle_program if mode == GL_TRIANGLES else self._segment_program)
         remaining = count
         for _vbo, texture, size in self._bound_primitive_chunks:
             if first >= size:
@@ -2354,7 +2582,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glBindVertexArray(0)
 
     def _visible_polyhedron_ranges(self, ranges: list[_PolyhedronRange]) -> list[_PolyhedronRange]:
-        return [item for item in ranges if self.polyhedron_site_visibility.get(item.site_key, True)]
+        return [item for item in ranges if self.polyhedron_site_visibility.get(item.site_key, True)
+                and (item.poly_index is None or self._polyhedron_opacity(item.poly_index) > 0)]
 
     def _draw_opaque_polyhedra(self) -> None:
         if not self.show_polyhedra:
@@ -2372,28 +2601,66 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._draw_primitive_instances(GL_TRIANGLES, item.first, item.count)
         glBindVertexArray(0)
 
-    def _ordered_face_ranges(self) -> list[_PolyhedronRange]:
-        orientation = np.asarray(self.orientation, dtype=float)
-        return sorted(self._visible_polyhedron_ranges(self._effective_ranges('face')),
-                      key=lambda item: float((orientation @ item.center)[2]))
+    def _ordered_transparent_primitives(self):
+        faces = self._visible_polyhedron_ranges(self._effective_ranges('face'))
+        edges = self._visible_polyhedron_ranges(self._effective_ranges('face_edge'))
+        items = [(False,item) for item in faces]+[(True,item) for item in edges]
+        margin = 2.1/max(self._screen_scale(),1e-12)
+        key = (tuple(np.asarray(self.orientation).ravel()),margin,self._sort_material_revision,
+               tuple((edge,id(item)) for edge,item in items))
+        if key != self._transparent_order_key:
+            prepared_key = (self._sort_material_revision,
+                            tuple((edge,id(item)) for edge,item in items))
+            if prepared_key != self._transparent_prepared_key:
+                geometry_key = (self._sort_geometry_revision,
+                    tuple((edge,item.poly_index,item.count,len(item.vertices)) for edge,item in items))
+                materials = {i:(poly.site_key,self._polyhedron_colour(poly).name())
+                             for i,poly in enumerate(self._display_scene.polyhedra)}
+                if geometry_key != self._transparent_geometry_key or self._transparent_prepared is None:
+                    primitives = [(edge,item.vertices,materials[item.poly_index]) for edge,item in items]
+                    self._transparent_prepared = prepare_primitives(primitives)
+                    self._transparent_geometry_key = geometry_key
+                else:
+                    self._transparent_prepared = material_keys(self._transparent_prepared,
+                        [materials[item.poly_index] for _edge,item in items])
+                self._transparent_prepared_key = prepared_key
+            order,self._transparency_sort_conflicts = back_to_front(
+                self._transparent_prepared,self.orientation,line_margin=margin,
+                stats=self._transparency_sort_stats)
+            self._transparent_order = [items[i] for i in order]
+            self._transparent_order_key = key
+        return self._transparent_order
 
-    def _draw_transparent_faces(self) -> None:
+    def _draw_sorted_transparency(self) -> None:
         if not self.show_polyhedra:
             return
-        ranges = self._ordered_face_ranges()
-        if not ranges:
+        ordered = self._ordered_transparent_primitives()
+        if not ordered:
             return
-        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        # Set each program's camera/material uniforms once, then interleave
+        # resident face and edge ranges in a single global visibility order.
+        self._set_instance_uniforms(self._triangle_program,4)
+        self._set_instance_uniforms(self._segment_program,3,width_px=1.575,depth_bias=1e-5)
+        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
         glDepthMask(GL_FALSE)
-        self._set_instance_uniforms(self._triangle_program, 4)
-        bound = None
-        for item in ranges:
-            prefix = item.buffer_key or '_face'
-            if prefix != bound:
-                self._bind_primitive(getattr(self, prefix + '_vao'), getattr(self, prefix + '_texture'))
-                bound = prefix
-            self._draw_primitive_instances(GL_TRIANGLES, item.first, item.count)
-        glBindVertexArray(0); glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+        try:
+            bound = None
+            runs = []
+            for edge,item in ordered:
+                prefix = item.buffer_key or ('_face_edge' if edge else '_face')
+                if runs and runs[-1][:2] == [edge,prefix] and runs[-1][2]+runs[-1][3]==item.first:
+                    runs[-1][3] += item.count
+                else:
+                    runs.append([edge,prefix,item.first,item.count])
+            for edge,prefix,first,count in runs:
+                program = self._segment_program if edge else self._triangle_program
+                if bound != (edge,prefix):
+                    glUseProgram(program)
+                    self._bind_primitive(getattr(self,prefix+'_vao'),getattr(self,prefix+'_texture'))
+                    bound = (edge,prefix)
+                self._draw_primitive_instances(GL_LINES if edge else GL_TRIANGLES,first,count)
+        finally:
+            glBindVertexArray(0); glDepthMask(GL_TRUE); glDisable(GL_BLEND)
 
     def _draw_face_edges(self) -> None:
         if not self.show_polyhedra:
@@ -2481,6 +2748,10 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._set_edge_uniforms(width_px=width_px, depth_bias=bias)
         glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glDepthMask(GL_FALSE)
         for item in ranges:
+            local_opacity = (self._scene_updates.opacity_overrides.get(item.poly_index)
+                             if self._scene_updates else None)
+            glUniform1f(self._edge_uniform_opacity, self._polyhedron_opacity(item.poly_index)
+                        if local_opacity is not None else 1.0)
             vao = (self._partial_section_gpu[item.poly_index].vao if item.buffer_key
                    else self._intersection_vao)
             glBindVertexArray(vao)
@@ -2548,27 +2819,28 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(origin.x() - 2.5, origin.y() - 2.5, 5.0, 5.0))
 
+    def _legend_entries(self):
+        if self._legend_entries_cache is None:
+            first = {}
+            if self._display_scene is not None:
+                for index, atom in enumerate(self._display_scene.atoms):
+                    if not self._global_atom_visible(index) or not self._locally_visible(index):
+                        continue
+                    for component in atom.components:
+                        if self._component_visible(component) and component.element not in first:
+                            first[component.element] = self._component_colour(component)
+                self._legend_entries_cache = tuple((element, first[element])
+                    for element in self._display_scene.elements if element in first)
+            else:
+                self._legend_entries_cache = ()
+        return self._legend_entries_cache
+
     def _draw_overlay_legend(self, painter: QPainter) -> None:
         if self._display_scene is None or not self.show_atoms:
             return
         x, y = 12.0, 18.0
         metrics = QFontMetrics(painter.font())
-        visible_elements = {
-            component.element
-            for atom in self._display_scene.atoms
-            for component in atom.components
-            if self._component_visible(component)
-        }
-        for element in self._display_scene.elements:
-            if element not in visible_elements:
-                continue
-            component = next(
-                component
-                for atom in self._display_scene.atoms
-                for component in atom.components
-                if component.element == element
-            )
-            colour = self._component_colour(component)
+        for element, colour in self._legend_entries():
             painter.setPen(QPen(colour.darker(150)))
             painter.setBrush(QBrush(colour))
             painter.drawEllipse(QRectF(x, y - 8.0, 10.0, 10.0))
@@ -2610,7 +2882,229 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         finally:
             painter.end()
 
+    def _should_use_weighted_oit(self):
+        return (not self.engraving
+                and self.weighted_oit_error is None and self._display_scene is not None
+                and self.show_polyhedra and (self.weighted_blended_oit or
+                    (self.weighted_blended_oit_when_rotate and (self._external_rotation_active
+                     or (self._rotation_drag_active and self._rotation_drag_changed)))))
+
+    def _note_orientation_change(self):
+        if not self.weighted_blended_oit_when_rotate or self.engraving:
+            return
+        self._awaiting_exact_frame = False
+        if self._orientation_source_mouse and self._rotation_drag_active:
+            self._rotation_drag_changed = True
+            self._external_rotation_active = False
+            self._rotation_timer.stop()
+        elif not self.weighted_blended_oit:
+            self._external_rotation_active = True
+            self._rotation_timer.start()
+
+    def _external_rotation_stopped(self):
+        self._external_rotation_active = False
+        if not (self._rotation_drag_active and self._rotation_drag_changed):
+            self._awaiting_exact_frame = not self.weighted_blended_oit
+            self.update()
+
+    def _finish_mouse_rotation(self):
+        pending = (self._external_rotation_active or self._rotation_drag_changed
+                   or self._last_frame_wboit)
+        self._rotation_drag_active = False
+        self._rotation_drag_changed = False
+        self._external_rotation_active = False
+        self._rotation_timer.stop()
+        self._awaiting_exact_frame = (self._awaiting_exact_frame or pending) and not self.weighted_blended_oit
+        self.update()
+
+    def _stop_camera_motion(self):
+        self._finish_mouse_rotation()
+
+    def _show_quality_menu(self, position):
+        if self._quality_menu is not None:
+            self._quality_menu.close()
+        self._stop_camera_motion()
+        self._last_mouse = None
+        self._drag_button = None
+        menu = QMenu(self)
+        actions = []
+        for label, name in (('Weighted Blended OIT when rotate', 'weighted_blended_oit_when_rotate'),
+                            ('Weighted Blended OIT always', 'weighted_blended_oit')):
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(getattr(self, name))
+            action.toggled.connect(lambda checked, name=name: self.set_display_options(**{name: checked}))
+            actions.append(action)
+        if self.weighted_oit_error is not None:
+            for action in actions:
+                action.setEnabled(False)
+                action.setToolTip(self.weighted_oit_error)
+            short_reason = self.weighted_oit_error.splitlines()[0][:140]
+            reason = menu.addAction('Unavailable: ' + short_reason)
+            reason.setToolTip(self.weighted_oit_error)
+            reason.setEnabled(False)
+            menu.setToolTipsVisible(True)
+        elif self.engraving:
+            for action in actions:
+                action.setToolTip('Used only in colour mode')
+            menu.setToolTipsVisible(True)
+        self._quality_menu = menu
+        menu.aboutToHide.connect(lambda: setattr(self, '_quality_menu', None))
+        menu.aboutToHide.connect(menu.deleteLater)
+        menu.popup(position)
+
+    def event(self, event):
+        if (hasattr(self, '_rotation_timer') and event.type() in
+                (QEvent.Type.UngrabMouse, QEvent.Type.WindowDeactivate,
+                 QEvent.Type.FocusOut, QEvent.Type.Hide)):
+            self._stop_camera_motion()
+            self._last_mouse = None
+            self._drag_button = None
+        return super().event(event)
+
+    def _weighted_ranges(self, kind, *, opaque=False):
+        ranges = self._visible_polyhedron_ranges(self._effective_ranges(kind))
+        if kind == 'face_edge':
+            ranges = [item for item in ranges
+                      if (self._polyhedron_opacity(item.poly_index) == 1) == opaque]
+        return ranges
+
+    def _draw_weighted_ranges(self, ranges, edge, program):
+        if not ranges:
+            return
+        self._set_instance_uniforms(program, 3 if edge else 4)
+        # Unlike sorted transparency, arbitrary neighbouring ranges can be
+        # submitted in storage order and coalesced without changing the result.
+        runs = []
+        for item in ranges:
+            prefix = item.buffer_key or ('_face_edge' if edge else '_face')
+            if runs and runs[-1][0] == prefix and runs[-1][1]+runs[-1][2] == item.first:
+                runs[-1][2] += item.count
+            else:
+                runs.append([prefix,item.first,item.count])
+        for prefix, first, count in runs:
+            self._bind_primitive(getattr(self,prefix+'_vao'),getattr(self,prefix+'_texture'))
+            self._draw_primitive_instances(GL_LINES if edge else GL_TRIANGLES,first,count,program=program)
+        glBindVertexArray(0)
+
+    def _draw_weighted_frame(self, background):
+        from OpenGL import GL as gl
+        try:
+            with preserved_state():
+                target = self.defaultFramebufferObject()
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER,target)
+                samples = max(1,int(gl.glGetIntegerv(gl.GL_SAMPLES)))
+                viewport = gl.glGetIntegerv(gl.GL_VIEWPORT)
+                width,height = int(viewport[2]),int(viewport[3])
+                if self._weighted_oit is None:
+                    self._weighted_oit = WeightedOIT()
+                oit = self._weighted_oit
+                oit.initialize()
+                self._instance_uniforms.update(oit.uniforms)
+                oit.ensure_size(width,height,samples)
+                oit.begin_scene((background.redF(),background.greenF(),background.blueF(),1.))
+                self._set_frame_uniforms()
+                self._draw_opaque_polyhedra()
+                self._draw_colour_bonds()
+                if self.show_atoms and self._atom_count:
+                    self._set_atom_uniforms()
+                    glBindVertexArray(self._atom_vao)
+                    glDrawElementsInstanced(GL_TRIANGLES,self._atom_index_count,GL_UNSIGNED_INT,
+                                           ctypes.c_void_p(0),self._atom_count)
+                    glBindVertexArray(0)
+                # Same depth-tested ink base as the exact renderer. Transparent
+                # surfaces blend over it, never an unconditional overlay.
+                self._draw_atom_face_intersections()
+                self._draw_atom_outlines()
+                # Solid polyhedra's feathered edges belong to the opaque base,
+                # not to weighted colour accumulation. Do not write the feather
+                # rectangle's depth; the solid faces already supplied depth.
+                opaque_edges = self._weighted_ranges('face_edge',opaque=True)
+                if opaque_edges:
+                    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
+                    glDepthMask(GL_FALSE)
+                    self._draw_weighted_ranges(opaque_edges,True,self._segment_program)
+                    glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+                faces = self._weighted_ranges('face')
+                edges = self._weighted_ranges('face_edge')
+                # Half-float accumulators: a sample receives at most one
+                # contribution per triangle, two per expanded edge. Bound the
+                # total by 1024 even for enormous resident geometry.
+                upper = sum(item.count for item in faces)+2*sum(item.count for item in edges)
+                weight_scale = min(1.,1024./max(1,upper))
+                for mode in (0,1):
+                    (oit.begin_revealage if mode else oit.begin_accumulation)()
+                    for ranges, edge, program in ((faces,False,oit.triangle_program),
+                                                  (edges,True,oit.segment_program)):
+                        glUseProgram(program)
+                        glUniform1i(oit.uniforms[program]['u_oit_pass'],mode)
+                        glUniform1f(oit.uniforms[program]['u_weight_scale'],weight_scale)
+                        self._draw_weighted_ranges(ranges,edge,program)
+                oit.composite(target)
+            return True
+        except Exception as exc:
+            # An optional renderer failure must not poison the main renderer.
+            self.weighted_oit_error = str(exc) or type(exc).__name__
+            if self._weighted_oit is not None:
+                try:
+                    with preserved_state():
+                        for program in self._weighted_oit.uniforms:
+                            self._instance_uniforms.pop(program,None)
+                        self._weighted_oit.cleanup()
+                except Exception as cleanup_error:
+                    self.weighted_oit_error += f'; cleanup: {cleanup_error}'
+                self._weighted_oit = None
+            # A failed composition may already have touched Qt's colour target.
+            # Start the fallback from the same clean base as an ordinary frame.
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER,self.defaultFramebufferObject())
+            self._restore_render_state()
+            glClearColor(background.redF(),background.greenF(),background.blueF(),1.)
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            return False
+
+    def _draw_exact_scene(self):
+        self._set_frame_uniforms()
+        self._draw_opaque_polyhedra()
+        self._draw_colour_bonds()
+        if self.show_atoms and self._atom_count > 0:
+            self._set_atom_uniforms()
+            glBindVertexArray(self._atom_vao)
+            glDrawElementsInstanced(
+                GL_TRIANGLES, self._atom_index_count, GL_UNSIGNED_INT,
+                ctypes.c_void_p(0), self._atom_count,
+            )
+            glBindVertexArray(0)
+            self._set_frame_uniforms()
+
+        # Atom silhouette and atom/face intersection ink belong to the atom
+        # layer.  Draw them BEFORE transparent polyhedron faces so a face
+        # that is actually in front blends over the ink instead of the ink
+        # looking like a screen-space overlay.  Opaque geometry has already
+        # populated the depth buffer, so the usual occlusion still applies.
+        glUseProgram(0)
+        self._draw_atom_face_intersections()
+        self._draw_atom_outlines()
+
+        self._set_frame_uniforms()
+        if not self.engraving:
+            self._draw_sorted_transparency()
+        glUseProgram(0)
+        self._draw_engraving_bonds()
+        self._draw_hatches()
+        if self.engraving:
+            self._draw_face_edges()
+        glUseProgram(0)
+
     def paintGL(self) -> None:
+        self._last_frame_wboit = False
+        # closeEvent releases GPU resources even when Qt keeps the context.
+        # Qt need not call initializeGL again on show(), so rebuild here while
+        # paintGL has the current context. Failed initialization is not retried
+        # every frame; its error remains available through opengl_error.
+        if not self._program and self.opengl_error is None:
+            self.initializeGL()
+        if self._scene_storage_pending_clear and self._program:
+            self._release_scene_storage()
         if self._show_fps:
             self._frame_times.append(time.perf_counter())
         background = QColor(250, 250, 247) if self.engraving else self.palette().base().color()
@@ -2635,47 +3129,36 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             if self._atom_outline_dirty:
                 self._rebuild_atom_outline_cache()
             self._flush_scene_updates()
-            self._set_frame_uniforms()
-            self._draw_opaque_polyhedra()
-            self._draw_colour_bonds()
-            if self.show_atoms and self._atom_count > 0:
-                self._set_atom_uniforms()
-                glBindVertexArray(self._atom_vao)
-                glDrawElementsInstanced(
-                    GL_TRIANGLES, self._atom_index_count, GL_UNSIGNED_INT,
-                    ctypes.c_void_p(0), self._atom_count,
-                )
-                glBindVertexArray(0)
-                self._set_frame_uniforms()
-
-            # Atom silhouette and atom/face intersection ink belong to the atom
-            # layer.  Draw them BEFORE transparent polyhedron faces so a face
-            # that is actually in front blends over the ink instead of the ink
-            # looking like a screen-space overlay.  Opaque geometry has already
-            # populated the depth buffer, so the usual occlusion still applies.
-            glUseProgram(0)
-            self._draw_atom_face_intersections()
-            self._draw_atom_outlines()
-
-            self._set_frame_uniforms()
-            self._draw_transparent_faces()
-            glUseProgram(0)
-            self._draw_engraving_bonds()
-            self._draw_hatches()
-            self._draw_face_edges()
-            glUseProgram(0)
+            if self._should_use_weighted_oit():
+                self._last_frame_wboit = self._draw_weighted_frame(background)
+            if not self._last_frame_wboit:
+                self._draw_exact_scene()
+                self._awaiting_exact_frame = False
         # Leave the newly introduced texture-buffer target unbound for Qt's
         # painter/compositor and other widgets sharing this context group.
         glBindTexture(GL_TEXTURE_BUFFER, 0)
+        glActiveTexture(GL_TEXTURE0 + 3)
+        glBindTexture(GL_TEXTURE_BUFFER, 0)
+        glActiveTexture(GL_TEXTURE0)
         self._draw_overlay()
 
     def mousePressEvent(self, event) -> None:
+        if (event.button() == Qt.MouseButton.RightButton
+                and event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self._show_quality_menu(event.globalPosition().toPoint())
+            event.accept()
+            return
         if (
             event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton)
             and self._display_scene is not None
         ):
+            if self._rotation_drag_active:
+                self._finish_mouse_rotation()
             self._last_mouse = event.position()
             self._drag_button = event.button()
+            if event.button() == Qt.MouseButton.LeftButton and self.rotation_enabled:
+                self._rotation_drag_active = True
+                self._rotation_drag_changed = False
             event.accept()
             return
         super().mousePressEvent(event)
@@ -2690,12 +3173,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._last_mouse = position
         if self._drag_button == Qt.MouseButton.LeftButton:
             if self.rotation_enabled:
-                self.orientation = screen_drag_orientation(self.orientation, float(dx), float(dy))
-                # Hatching is view-dependent: visible faces, seed face and propagated
-                # directions must be recalculated continuously while the crystal turns.
-                self._hatch_dirty = True
-                self.orientation_changed.emit(self.orientation.copy())
-                self.update()
+                self._orientation_source_mouse = True
+                try:
+                    self.set_orientation(screen_drag_orientation(self.orientation, float(dx), float(dy)), emit=True)
+                finally:
+                    self._orientation_source_mouse = False
         elif self._drag_button == Qt.MouseButton.RightButton:
             self.pan_x += float(dx)
             self.pan_y += float(dy)
@@ -2708,6 +3190,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             rotated = self._drag_button == Qt.MouseButton.LeftButton
             self._last_mouse = None
             self._drag_button = None
+            if rotated:
+                self._finish_mouse_rotation()
             if rotated and self.rotation_enabled:
                 self.interaction_finished.emit()
             self.update()
@@ -2734,6 +3218,20 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             pass
 
     def _reset_gpu_objects(self) -> None:
+        self._weighted_oit = None
+        self.weighted_oit_error = None
+        self._poly_opacity_vbo = 0
+        self._poly_opacity_texture = 0
+        self._poly_opacity_data = np.empty((0,1), np.float32)
+        self._classified_poly_ranges = None
+        self._pending_opacities.clear()
+        self._transparent_order_key = None
+        self._transparent_order = []
+        self._transparency_sort_conflicts = 0
+        self._transparent_prepared = None
+        self._transparent_prepared_key = None
+        self._transparent_geometry_key = None
+        self._transparency_sort_stats = {}
         for attribute in (
             "_atom_vbo", "_atom_mesh_vbo", "_atom_ebo", "_opaque_vbo", "_bond_vbo", "_bond_mesh_vbo", "_bond_ebo", "_primitive_mesh_vbo", "_cell_vbo",
             "_face_vbo", "_face_edge_vbo", "_face_edge_order_vbo",
@@ -2751,6 +3249,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             "_edge_uniform_projection", "_edge_uniform_orientation",
             "_edge_uniform_viewport", "_edge_uniform_width",
             "_edge_uniform_depth_bias",
+            "_edge_uniform_opacity",
         ):
             setattr(self, attribute, -1)
         for attribute in (
@@ -2791,19 +3290,68 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._hatch_dirty = True
         self._atom_outline_dirty = True
 
+    def _clear_scene_cpu_data(self):
+        for name, width in (('_atom_instance_data',_ATOM_INSTANCE_FLOATS),
+                            ('_outline_instance_data',_OUTLINE_INSTANCE_FLOATS),
+                            ('_bond_instance_data',_BOND_INSTANCE_FLOATS),
+                            ('_engraving_instance_data',_SEGMENT_INSTANCE_FLOATS),
+                            ('_poly_opacity_data',1)):
+            setattr(self, name, np.empty((0,width),np.float32))
+        for name in ('_opaque_ranges','_face_ranges','_face_edge_ranges','_intersection_ranges'):
+            setattr(self, name, [])
+        for name in ('_atom_count','_atom_outline_count','_bond_count','_engraving_bond_count',
+                     '_opaque_count','_face_count','_face_edge_count','_intersection_count','_cell_count'):
+            setattr(self, name, 0)
+        self._base_ranges_by_poly.clear()
+        self._face_edge_order_records = None
+        self._face_edge_order_capacity = 0
+        for data in self._partial_poly_gpu.values():
+            for kind in ('opaque','face','face_edge'):
+                data.pop(kind, None)
+
+    def _release_scene_storage(self):
+        if self._weighted_oit is not None:
+            with preserved_state():
+                self._weighted_oit.release_attachments()
+        self._delete_partial_poly_buffers()
+        self._delete_partial_section_buffers()
+        self._delete_hatch_buffers()
+        for prefix in tuple(self._primitive_chunks):
+            self._delete_primitive_extras(prefix)
+        self._primitive_chunks.clear()
+        for attribute in ('_atom_vbo','_bond_vbo','_opaque_vbo','_face_vbo','_face_edge_vbo',
+                          '_cell_vbo','_atom_outline_vbo','_intersection_vbo',
+                          '_engraving_bond_vbo','_face_edge_order_vbo','_poly_opacity_vbo'):
+            vbo = getattr(self, attribute, 0)
+            if vbo:
+                glBindBuffer(GL_ARRAY_BUFFER,vbo)
+                glBufferData(GL_ARRAY_BUFFER,0,None,GL_STATIC_DRAW)
+        glBindBuffer(GL_ARRAY_BUFFER,0)
+        self._clear_scene_cpu_data()
+        self._scene_storage_pending_clear = False
+
     def _context_about_to_be_destroyed(self) -> None:
         self.cleanup()
 
     def cleanup(self) -> None:
+        self._stop_camera_motion()
         if self._cleaning_up:
             return
         self._cleaning_up = True
         context = self.context()
         can_delete = context is not None and context.isValid()
-        if can_delete:
-            self.makeCurrent()
+        current = False
         try:
             if can_delete:
+                self.makeCurrent()
+                current = True
+                if self._weighted_oit is not None:
+                    self._weighted_oit.cleanup()
+                    self._weighted_oit = None
+                if self._poly_opacity_texture:
+                    glDeleteTextures(1, [self._poly_opacity_texture])
+                if self._poly_opacity_vbo:
+                    glDeleteBuffers(1, [self._poly_opacity_vbo])
                 self._delete_partial_poly_buffers()
                 self._delete_partial_section_buffers()
                 self._delete_hatch_buffers()
@@ -2836,11 +3384,15 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     if value:
                         glDeleteProgram(value)
         finally:
-            if can_delete:
-                self.doneCurrent()
-            self._disconnect_context_cleanup()
-            self._reset_gpu_objects()
-            self._cleaning_up = False
+            try:
+                if current:
+                    self.doneCurrent()
+            finally:
+                # A failed makeCurrent leaves handles available for a retry.
+                if current or not can_delete:
+                    self._disconnect_context_cleanup()
+                    self._reset_gpu_objects()
+                self._cleaning_up = False
 
     def closeEvent(self, event) -> None:
         self.cleanup()

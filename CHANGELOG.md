@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.5 - 2026-10-19
+
+Changes since the published 0.2.4 release:
+
+- Add indexed external polyhedron opacity updates without mesh rebuilds.
+- Sort transparent faces and physical edges together using projected overlap
+  depth, preserving native Qt MSAA without depth peeling or supersampling.
+- Add independent per-widget WBOIT-during-rotation and permanent WBOIT options
+  through Shift + right-button menu and trailing DisplayOptions fields.
+- Permanent WBOIT takes priority; rotation-only mode returns to sorted rendering
+  on release or after 150 ms of external orientation inactivity. Preserve signals,
+  ordinary pan/zoom and engraving; include nonfatal fallback and resource limits.
+- Cache world geometry/material keys/normals; prune projected candidates and
+  bound clipping batches. Index atoms/polyhedron bounds and cache contact frames.
+- Make opacity-only state lazy, update host polyhedron styles locally and cache
+  legend entries using visible components.
+- Validate integer indices, GPU float32 input/derived ranges and invertible,
+  well-conditioned orientations; stabilize very large occupancy weights.
+- Free resources on shader failures and scene clear; restore normal close/show.
+- Add state, fault, GL lifecycle and numerical regressions, plus separate CPU,
+  GPU, frame-interval and dense-graph diagnostics. Dependencies are unchanged.
+
+See RELEASE_NOTES_0.2.5.md for the complete release relative to GitHub 0.2.4.
+
 ## 0.2.4 - 2026-10-13
 
 Changes since 0.2.3:

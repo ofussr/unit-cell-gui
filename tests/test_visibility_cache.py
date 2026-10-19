@@ -78,7 +78,7 @@ class VisibilityCacheTests(unittest.TestCase):
             self.viewer._rebuild_gpu_cache()
             self.viewer._rebuild_intersection_cache()
         with ExitStack() as stack:
-            for name in ("glBindVertexArray", "glEnable", "glBlendFunc", "glDepthMask", "glDisable"):
+            for name in ("glBindVertexArray", "glEnable", "glBlendFunc", "glDepthMask", "glDisable", "glUseProgram"):
                 stack.enter_context(patch.object(renderer, name))
             stack.enter_context(patch.object(self.viewer, "_set_edge_uniforms"))
             stack.enter_context(patch.object(self.viewer, "_set_instance_uniforms"))
@@ -88,7 +88,7 @@ class VisibilityCacheTests(unittest.TestCase):
             draw = stack.enter_context(patch.object(renderer, "glDrawArrays"))
             for method, ranges in (
                 (self.viewer._draw_opaque_polyhedra, self.viewer._opaque_ranges),
-                (self.viewer._draw_transparent_faces, self.viewer._face_ranges),
+                (self.viewer._draw_sorted_transparency, self.viewer._face_ranges+self.viewer._face_edge_ranges),
                 (self.viewer._draw_face_edges, self.viewer._face_edge_ranges),
                 (self.viewer._draw_atom_face_intersections, self.viewer._intersection_ranges),
             ):
@@ -99,7 +99,15 @@ class VisibilityCacheTests(unittest.TestCase):
                 if method == self.viewer._draw_face_edges:
                     drawn = sorted((item.first, item.count) for call in draw_ordered.call_args_list for item in call.args[0])
                 expected = sorted((item.first, item.count) for item in ranges if item.site_key not in {"p1", "p2"})
-                self.assertEqual(drawn, expected)
+                if method == self.viewer._draw_sorted_transparency:
+                    drawn_indices=sorted((call.args[0],i) for call in draw_instances.call_args_list
+                                         for i in range(call.args[1],call.args[1]+call.args[2]))
+                    expected_indices=sorted((renderer.GL_TRIANGLES if item.vertices.shape[0]>2 else renderer.GL_LINES,i)
+                                            for item in ranges if item.site_key not in {"p1","p2"}
+                                            for i in range(item.first,item.first+item.count))
+                    self.assertEqual(drawn_indices,expected_indices)
+                else:
+                    self.assertEqual(drawn, expected)
                 self.viewer.show_polyhedra = False
                 draw.reset_mock(); draw_instances.reset_mock(); draw_ordered.reset_mock()
                 method()

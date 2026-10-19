@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: unit-cell-gui
-Version: 0.2.4
+Version: 0.2.5
 Summary: PySide6 widget for rendering caller-supplied unit-cell scenes
 Author-email: Mikhail Mirushchenko <miruschenko98@gmail.com>
 License-Expression: MIT
@@ -111,6 +111,13 @@ therefore cannot alter an already submitted scene.
 camera coordinate is `orientation @ world`; the renderer's row arrays use the
 equivalent `world @ orientation.T`.
 
+Matrices must be finite and float32-representable, remain invertible after
+float32 rounding, and have condition number below 1e6. Their inverse and
+conservative generated/transformed geometry bounds must also fit float32.
+Reflections and general well-conditioned invertible matrices remain accepted;
+SO(3) orthogonality is not required. Invalid input leaves the previous state
+unchanged and does not emit a signal.
+
 Programmatic changes are silent by default:
 
 ```python
@@ -203,8 +210,7 @@ Camera changes keep geometry resident; depth-sorted edges update compact
 index lists. Large arrays are split at the driver's texture-buffer limit.
 Sphere tessellation remains 720 triangles per atom; no LOD is applied.
 
-Hatching uses intact polygons and the existing stroke algorithm. Line widths,
-antialiasing and transparency order are retained. In coloured mode, atom/face
+Hatching uses intact polygons and the existing stroke algorithm. In coloured mode, atom/face
 intersection curves use the corresponding face colour, including polyhedron
 colour overrides. Engraving keeps black intersection ink.
 
@@ -215,6 +221,7 @@ viewer.update_scene(
     atom_positions={17: (x, y, z)},
     atom_visibility={42: False},
     polyhedra={3: updated_polyhedron},
+    polyhedron_opacities={3: 0.35},
 )
 ```
 
@@ -237,3 +244,93 @@ requiring a complete scene rebuild.
 See [the API contract](docs/partial-updates.md),
 [the external-control example](examples/partial_updates.py), and
 [changes since 0.2.3](RELEASE_NOTES_0.2.4.md).
+
+## Transparency and opacity control (0.2.5)
+
+Transparent faces and physical edges share a global back-to-front order computed
+from depth over projected overlap. The default renderer draws directly into Qt's
+MSAA framebuffer without depth peeling or whole-window supersampling. Opaque
+atoms, bonds and faces write depth before transparent surfaces. The host supplies
+planar convex faces without physical intersections or cyclic visibility. Shared
+boundaries are supported; dense overlap can still produce quadratic graph memory.
+
+External opacity updates reuse resident geometry:
+
+```python
+viewer.set_polyhedron_opacities({3: 0.35, 7: 1.0})
+viewer.update_scene(atom_positions={17: (x, y, z)},
+                    polyhedron_opacities={3: 0.5})
+viewer.set_polyhedron_opacities({3: None})
+values = viewer.get_polyhedron_opacities()
+```
+
+Use original scene indices and GUI-thread calls. Zero hides an object; one makes
+it opaque; None restores its default. Invalid packets are rejected atomically.
+Fill/edges change together and explicit opacity fades contacts. A separate table
+normally uploads four bytes per changed object. Positive fractional values are
+stored in engraving, whose displayed fills remain opaque; zero hides the object.
+See the [complete contract](docs/partial-updates.md).
+
+## Optional WBOIT modes
+
+**Shift + right mouse button** opens two independent checkboxes:
+
+| Setting | Behavior |
+| --- | --- |
+| Weighted Blended OIT when rotate | Approximate during rotation, exact after release/external inactivity |
+| Weighted Blended OIT always | Approximate also at rest and after mouse release; takes priority |
+
+Both default to false, apply to one widget, are not saved to disk, and are
+ignored by engraving. Ordinary right-button dragging still pans. The existing
+external API controls both:
+
+```python
+viewer.set_display_options(weighted_blended_oit=True)  # permanent
+viewer.set_display_options(weighted_blended_oit=False) # leave permanent mode
+viewer.set_display_options(weighted_blended_oit_when_rotate=True)
+# Both off: use sorted transparency throughout.
+viewer.set_display_options(weighted_blended_oit=False,
+                           weighted_blended_oit_when_rotate=False)
+```
+
+The checkboxes retain their independent values. Disabling permanent mode restores
+the rotation-only preference. With rotation-only enabled, external set_orientation
+series request an exact frame after 150 ms without an effective change. Repeating
+the same orientation does not restart the timer. Mouse-held rotation stays fast
+until release/interruption. Permanent mode does not start an idle-to-exact timer.
+Neither quality changes nor timer completion emit extra orientation signals;
+emit=False keeps its meaning. Pan/zoom alone do not start rotation-only WBOIT.
+
+WBOIT uses two GL 3.3 accumulation passes and per-sample composition with shared
+owned MSAA depth. It skips exact sorting and reuses resident meshes. Edge
+coverage participates in alpha; opaque edges are handled separately and
+contours/contacts are depth-tested beneath transparency. The approximation can
+change hues/edge emphasis. Permanent mode intentionally retains it after stopping.
+Small scenes may be slower with WBOIT enabled.
+
+Resources are lazy and reused. Additional attachments cost approximately
+20 bytes × physical width × physical height × actual samples: 23.4 MiB at
+640 × 480 × 4, or 158.2 MiB at 1920 × 1080 × 4. DPR 2 multiplies this by four.
+Qt/geometry/driver padding is additional. Exceeding the 256 MiB per-widget budget
+or GPU limits uses exact fallback without silently lowering MSAA. Allocation or
+pass failures appear in the menu and weighted_oit_error, separately from the
+main opengl_error; retry is permitted after context restoration or close/show.
+Scene clear/cleanup releases attachments. The historical
+transparency_supersampling=1/2 field remains an inert compatibility option.
+
+## Preparation and robustness (0.2.5)
+
+World geometry, topology/material keys and normals are prepared once for camera
+updates. Projected bounds prune sort candidates. Refittable spatial indices and
+cached face frames reduce contact/local-update work. Opacity-only state is lazy;
+host polyhedron style refreshes stay local. The legend uses cached visible
+components. GPU ranges and derived geometry are validated, integer indices are
+strict, unstable orientations are rejected atomically and huge finite occupancy
+weights are normalized safely. Scene clear releases scene storage, shader-failure
+cleanup is transactional, and ordinary close/show restores GPU resources.
+
+See [release notes relative to GitHub 0.2.4](RELEASE_NOTES_0.2.5.md),
+[transparency details](docs/hybrid-transparency.md),
+[external-control example](examples/partial_updates.py), and
+[validation commands](validation/README.md). Existing host calls/dependencies and
+all 0.2.4 instancing/hatching features remain supported.

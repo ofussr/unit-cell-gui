@@ -7,12 +7,12 @@ from types import MappingProxyType
 from typing import Mapping
 
 import numpy as np
+from ._numeric import GPU_MAX, gpu_values, index_array, integer, atom_radius, scene_numeric_bounds
 
 
 def _array(value, shape, dtype=float) -> np.ndarray:
     result = np.asarray(value, dtype=dtype).reshape(shape).copy()
-    if not np.all(np.isfinite(result)):
-        raise ValueError("Scene coordinates must be finite.")
+    gpu_values(result, 'Scene coordinates')
     result.setflags(write=False)
     return result
 
@@ -30,8 +30,8 @@ class AtomComponent:
 
     def __post_init__(self) -> None:
         occupancy, radius = float(self.occupancy), float(self.radius)
-        if not np.isfinite(occupancy) or not np.isfinite(radius) or radius <= 0:
-            raise ValueError("Component occupancy and radius must be finite; radius must be positive.")
+        if not np.isfinite(occupancy) or not np.isfinite(radius) or radius <= 0 or radius > GPU_MAX:
+            raise ValueError("Component occupancy must be finite; radius must be positive, finite and float32-representable.")
         object.__setattr__(self, "occupancy", occupancy)
         object.__setattr__(self, "radius", radius)
 
@@ -49,6 +49,7 @@ class Atom:
         object.__setattr__(self, "components", tuple(self.components))
         if not self.components:
             raise ValueError("An atom must contain at least one component.")
+        object.__setattr__(self, '_base_radius', atom_radius(self))
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ class Polyhedron:
     def __post_init__(self) -> None:
         center = _array(self.center, (3,))
         vertices = _array(self.vertices, (-1, 3))
-        faces = tuple(tuple(int(index) for index in face) for face in self.faces)
+        faces = tuple(tuple(integer(index, "face index") for index in face) for face in self.faces)
         if any(len(face) < 3 or any(index < 0 or index >= len(vertices) for index in face)
                for face in faces):
             raise ValueError("Every polyhedron face must contain valid vertex indices.")
@@ -100,9 +101,9 @@ class Scene:
     def __post_init__(self) -> None:
         atoms, polyhedra = tuple(self.atoms), tuple(self.polyhedra)
         atom_centers = _array(self.atom_centers, (-1, 3))
-        bonds = np.asarray(self.bonds, dtype=int).reshape(-1, 2).copy()
+        bonds = index_array(self.bonds, (-1, 2), "bond index")
         cell_vertices = _array(self.cell_vertices, (-1, 3))
-        cell_edges = np.asarray(self.cell_edges, dtype=int).reshape(-1, 2).copy()
+        cell_edges = index_array(self.cell_edges, (-1, 2), "cell-edge index")
         basis_vectors = _array(self.basis_vectors, (3, 3))
         if len(atoms) != len(atom_centers):
             raise ValueError("atoms and atom_centers must have the same length.")
@@ -113,8 +114,8 @@ class Scene:
         if np.any(np.linalg.norm(basis_vectors, axis=0) <= 1e-12):
             raise ValueError("Every basis vector must be non-zero.")
         radius = float(self.base_radius)
-        if not np.isfinite(radius) or radius <= 0:
-            raise ValueError("base_radius must be finite and positive.")
+        if not np.isfinite(radius) or radius <= 0 or radius > GPU_MAX:
+            raise ValueError("base_radius must be positive, finite and float32-representable.")
         bonds.setflags(write=False)
         cell_edges.setflags(write=False)
         elements = tuple(self.elements) or tuple(sorted({
@@ -129,6 +130,7 @@ class Scene:
         object.__setattr__(self, "polyhedra", polyhedra)
         object.__setattr__(self, "base_radius", radius)
         object.__setattr__(self, "elements", elements)
+        object.__setattr__(self, '_numeric_bounds', scene_numeric_bounds(self))
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,9 @@ class DisplayOptions:
     hatch_grip: int = 50
     atom_scale: float = 1.0
     rotation_enabled: bool = True
+    transparency_supersampling: int = 1
+    weighted_blended_oit_when_rotate: bool = False
+    weighted_blended_oit: bool = False
 
     def __post_init__(self) -> None:
         density = int(self.hatch_density)
@@ -154,11 +159,21 @@ class DisplayOptions:
         scale = float(self.atom_scale)
         if density < 0 or grip < 0:
             raise ValueError("Hatching density and GRIP must be non-negative.")
-        if not np.isfinite(scale) or scale <= 0:
-            raise ValueError("atom_scale must be finite and positive.")
+        if not np.isfinite(scale) or scale <= 0 or scale > GPU_MAX:
+            raise ValueError("atom_scale must be positive, finite and float32-representable.")
+        supersampling = self.transparency_supersampling
+        if (isinstance(supersampling, (bool, np.bool_))
+                or not isinstance(supersampling, (int, np.integer))
+                or supersampling not in (1, 2)):
+            raise ValueError("transparency_supersampling must be integer 1 or 2.")
         object.__setattr__(self, "hatch_density", density)
         object.__setattr__(self, "hatch_grip", grip)
         object.__setattr__(self, "atom_scale", scale)
+        object.__setattr__(self, "transparency_supersampling", int(supersampling))
+        for name in ('weighted_blended_oit_when_rotate', 'weighted_blended_oit'):
+            if not isinstance(getattr(self, name), (bool, np.bool_)):
+                raise TypeError(f"{name} must be bool.")
+            object.__setattr__(self, name, bool(getattr(self, name)))
 
 
 @dataclass(frozen=True)

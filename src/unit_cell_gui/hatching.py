@@ -6,14 +6,12 @@ import itertools
 from typing import Iterable
 
 import numpy as np
+from ._numeric import fractions
 
 
 def occupancy_fractions(components: Iterable[object]) -> tuple[float, ...]:
     """Return drawable site fractions while preserving partial occupancy."""
-    occupancies = tuple(max(0.0, float(component.occupancy)) for component in components)
-    total = sum(occupancies)
-    scale = 1.0 if total <= 1.0 else 1.0 / total
-    return tuple(occupancy * scale for occupancy in occupancies)
+    return fractions(component.occupancy for component in components)
 
 
 def quadrilateral_hatch_line_count(triangle_count: int) -> int:

@@ -1,23 +1,16 @@
 # unit-cell-gui
 
-`unit-cell-gui` is a reusable PySide6 widget that draws complete unit-cell
-scenes supplied by another program. It does not read CIF files, expand
-symmetry, resolve atomic positions, infer bonds, construct polyhedra or
-calculate diffraction.
+A reusable **PySide6/OpenGL widget for crystal-structure visualization**.
+The host application supplies Cartesian atoms, bonds, unit-cell geometry and
+optional polyhedra; the widget handles rendering, camera controls and display
+settings. CIF parsing, symmetry expansion, structure construction and diffraction
+calculations belong to the host application.
 
-The caller supplies ready Cartesian coordinates and presentation data:
-
-- atoms and their styled occupancy components;
-- bond indices;
-- unit-cell vertices and edges;
-- three basis vectors;
-- optional polyhedron vertices, polygon faces and centres.
-
-The package owns only display behaviour: camera projection, OpenGL depth buffering,
-left-button rotation, right-button panning, wheel zoom, occupancy sectors,
-colour and black-and-white drawing, and polyhedron hatching. Quadrilateral
-hatching uses one intact polygon with `2x + 1` full parallel strokes. Hatch
-directions on farther faces are refolded through real shared edges.
+- Coloured and black-and-white views, including polyhedron hatching.
+- Mixed and partial atomic occupancies, per-component colours and visibility.
+- Depth-tested atoms, bonds, polyhedron faces, edges and contact contours.
+- External updates to individual atoms, polyhedra and opacities.
+- Orientation signals for synchronization with other views.
 
 <table>
   <tr>
@@ -40,19 +33,19 @@ directions on farther faces are refolded through real shared edges.
 python -m pip install unit-cell-gui
 ```
 
-Python 3.10 or newer, NumPy, PySide6 Essentials and PyOpenGL are required. The renderer requests an OpenGL 3.3 core-profile context.
+Requires **Python 3.10+**, NumPy, PySide6 Essentials, PyOpenGL and a working
+**OpenGL 3.3 core-profile** driver. Python dependencies are installed by pip.
 
-Import `UnitCellViewer` or `CrystalCanvas` before constructing `QApplication`.
-This lets the package establish one shared OpenGL format for every viewer and
-keeps top-level Qt composition stable across screen and DPI changes. The basic
-example below already uses this order.
+Import `UnitCellViewer` before creating `QApplication`, as in the example below.
+This configures the shared Qt/OpenGL format for applications with multiple
+viewers or displays with different DPI settings.
 
-## Basic use
+## Quick start
 
 ```python
 import numpy as np
 from PySide6.QtWidgets import QApplication
-from unit_cell_gui import Atom, AtomComponent, DisplayOptions, Scene, UnitCellViewer
+from unit_cell_gui import Atom, AtomComponent, Scene, UnitCellViewer
 
 silicon = AtomComponent(
     key="Si:Si1", label="Si1", element="Si",
@@ -79,95 +72,168 @@ scene = Scene(
 app = QApplication([])
 viewer = UnitCellViewer()
 viewer.set_scene(scene)
-viewer.set_display_options(DisplayOptions(show_polyhedra=False))
 viewer.show()
 app.exec()
 ```
 
-`Scene` copies its arrays and makes them read-only. Later changes in the caller
-therefore cannot alter an already submitted scene.
+`Scene` copies its arrays and makes them read-only. Coordinates and radii use the
+host application's Cartesian units. Bond and edge indices must be integers;
+coordinates, radii and computed display geometry must fit GPU float32 ranges.
+Polyhedra are optional and hidden by default.
+
+`UnitCellViewer`, `CrystalCanvas` and `OpenGLUnitCellViewer` refer to the same
+renderer class.
+
+## Mouse controls
+
+| Input | Action |
+| --- | --- |
+| Left-button drag | Rotate |
+| Right-button drag | Pan |
+| Mouse wheel | Zoom |
+| Shift + right button | Open transparency options |
+
+Set `rotation_enabled=False` to disable mouse rotation while retaining pan,
+zoom and programmatic orientation updates.
+
+## Display and styling
+
+Pass a `DisplayOptions` object or individual keywords to `set_display_options()`:
+
+```python
+from unit_cell_gui import DisplayOptions, StyleOverrides
+
+viewer.set_display_options(DisplayOptions(show_polyhedra=True))
+viewer.set_display_options(engraving=True, hatching=True, atom_scale=1.2)
+viewer.set_style_overrides(StyleOverrides(
+    atom_component_colours={"Si:Si1": "#55aadd"},
+))
+```
+
+Display options control atoms, external atoms, bonds, the unit cell, basis
+vectors, polyhedra, atom scale and engraving/hatching settings. `StyleOverrides`
+provides component/site colour and visibility mappings and opaque-site choices.
+The widget copies these mappings; each `set_style_overrides()` call replaces the
+complete override set.
+
+Shared GPU meshes keep geometry resident during camera changes. Hatching uses
+intact polygon faces, including quadrilaterals. Contact curves follow the face
+colour in colour mode and use black ink in engraving mode.
+
+## Updating a scene externally
+
+After `set_scene(scene)`, update selected objects without rebuilding the complete
+scene. The following examples use indices and a `Polyhedron` supplied by the host:
+
+```python
+viewer.set_atom_positions({17: (x, y, z)})
+viewer.set_atom_visibility({42: False})
+viewer.update_polyhedra({3: updated_polyhedron})
+viewer.set_polyhedron_opacities({3: 0.35})
+
+# Apply several changes atomically.
+viewer.update_scene(
+    atom_positions={17: (x, y, z)},
+    atom_visibility={42: False},
+    polyhedra={3: updated_polyhedron},
+    polyhedron_opacities={3: 0.5},
+)
+```
+
+Indices refer to the original `Scene.atoms` and `Scene.polyhedra`. Positions are
+absolute Cartesian coordinates. Calls run on the **GUI thread**; accepted changes
+are applied during the next paint. Invalid packets leave the current state intact.
+The host remains responsible for bond topology and replacement polyhedron geometry.
+
+Opacity ranges from `0` (hidden) to `1` (opaque). `None` removes an individual
+opacity override. In engraving, positive values retain opaque fills and black
+ink; fractional values remain stored for colour mode.
+
+```python
+viewer.set_polyhedron_opacities({3: None})
+positions = viewer.get_atom_positions()
+visibility = viewer.get_atom_visibility()
+polyhedra = viewer.get_polyhedra()
+opacities = viewer.get_polyhedron_opacities()
+viewer.reset_scene_updates()
+```
+
+Getters return independent copies of the effective state. `viewer.scene` remains
+the original input. Resetting restores source geometry and removes local overrides
+while preserving camera and host display/style settings. `set_scene()` clears
+partial updates; `set_scene(None)` clears the view.
+
+See the [partial-update API](docs/partial-updates.md) and
+[runnable external-control example](examples/partial_updates.py).
 
 ## Orientation synchronization
 
-`orientation` is a 3 by 3 world-to-camera matrix. For column vectors the
-camera coordinate is `orientation @ world`; the renderer's row arrays use the
-equivalent `world @ orientation.T`.
-
-Programmatic changes are silent by default:
+Orientation is a world-to-camera matrix: `camera = orientation @ world` for a
+column vector. Set it silently or request a signal explicitly:
 
 ```python
 viewer.set_orientation(matrix, emit=False)
-```
-
-Interactive rotation emits the complete new matrix through
-`orientation_changed`. Connect that signal to a pole figure or another view,
-then send changes from the other view back with silent `set_orientation` calls.
-This supports bidirectional synchronization without a signal loop.
-
-```python
 viewer.orientation_changed.connect(update_other_view)
 other_view.orientation_changed.connect(
     lambda matrix: viewer.set_orientation(matrix, emit=False)
 )
 ```
 
-Set `rotation_enabled=False` when an application temporarily forbids left-button
-rotation. Panning and zoom remain available. Polyhedra are hidden by default
-and must be enabled with `show_polyhedra=True`.
+Mouse rotation emits the complete matrix through `orientation_changed`; release
+emits `interaction_finished`. Silent updates support bidirectional synchronization
+without a signal loop. Quality changes do not emit orientation signals.
 
-Per-position colours, visibility and opaque-polyhedron selections are replaced
-atomically with `viewer.set_style_overrides(StyleOverrides(...))`. The widget
-copies these mappings, so the host can keep its own independent UI state.
+Matrices must be finite, float32-representable and remain invertible after
+float32 rounding, with condition number below `1e6`. Supported transforms include
+well-conditioned nonorthogonal matrices and reflections. Invalid input leaves
+the orientation unchanged.
 
-## Atom instancing
+## Transparency modes
 
-Atoms share one indexed sphere mesh with the same 16-by-24 tessellation as
-previous releases. An OpenGL instance buffer stores each visible atom's
-Cartesian centre, radius, eight RGB occupancy colours and cumulative occupancy
-thresholds once, instead of repeating them for every triangle vertex. The atom
-layer uses one `glDrawElementsInstanced` call.
+The default renderer sorts transparent faces and physical edges together and
+preserves native MSAA antialiasing. Supplied faces must be planar and convex,
+without physical intersections or cyclic visibility constraints. Shared
+boundaries are supported; dense overlap can make sorting expensive.
 
-The base sphere and its indices occupy 18,792 bytes per viewer; instance records
-add 144 bytes per visible atom. For 1,000 atoms, these buffers total 162,792
-bytes, compared with 328,320,000 bytes for the previous expanded atom buffer.
-This comparison excludes bonds, outlines, polyhedra and Qt/driver overhead.
-The number of sphere triangles is unchanged, so this is primarily a reduction
-in geometry preparation and buffer storage, not a frame-rate guarantee.
+For approximate transparency, use the **Shift + right-button** menu or the API:
 
-OpenGL 3.3 core remains sufficient: the renderer uses 13 vertex attribute
-locations, within the guaranteed minimum of 16. No C++ extension, new package
-dependency or host-application API change is required.
+| Setting | Behaviour |
+| --- | --- |
+| Both off | Sorted transparency throughout |
+| Weighted Blended OIT when rotate | Approximate during rotation; sorted after stopping |
+| Weighted Blended OIT always | Approximate also at rest; takes priority when both are enabled |
 
-## Visibility and rendering caches
+```python
+viewer.set_display_options(weighted_blended_oit_when_rotate=True)
+viewer.set_display_options(weighted_blended_oit=True)   # permanent WBOIT
+viewer.set_display_options(weighted_blended_oit=False)  # keep rotation preference
+```
 
-Both global and per-site polyhedron visibility filter already prepared geometry
-at draw time. Faces, edges and atom/face intersection contours remain in GPU
-buffers when a site is hidden or shown. This avoids rebuilding the full
-polyhedron layer for each individual visibility change.
+Both options default to false, apply independently to each widget and are not
+saved to disk. Engraving ignores them. Rotation-only mode requests a sorted frame
+on mouse release or after **150 ms** without an effective external
+`set_orientation()` change. Pan and zoom alone do not start that mode.
 
-Engraving hatching is cached per polyhedron. Its density still follows the
-depth range of the visible polyhedra: hiding the nearest or farthest object can
-change other objects' effective division counts. Only affected hatch buffers
-are updated. Rotation, zoom, panning and window-size changes keep the original
-view-dependent hatching behaviour. CPU density variants are bounded and are
-discarded when the view or scene changes.
+WBOIT can change overlapping colours and edge emphasis, and can be slower on
+small scenes. It requires additional GPU memory and compatible floating-point
+MSAA targets. If unavailable, the widget uses sorted rendering and shows the
+reason in the menu and `weighted_oit_error`. Its attachment budget is 256 MiB per
+widget. See [transparency details and resource limits](docs/hybrid-transparency.md).
 
-Intersection contours and hatching are prepared when their layers are first
-needed. The initial preparation still has a cost; subsequent site visibility
-changes reuse the prepared data.
+## Documentation
 
-
-## Renderer compatibility
-
-`UnitCellViewer` and the legacy alias `CrystalCanvas` now use the OpenGL
-renderer internally. Existing construction, scene submission, display-option,
-style-override, orientation-synchronization and interaction calls remain the
-same. `OpenGLUnitCellViewer` remains available as an explicit name and refers
-to the same renderer class.
+- [Scene models and display/style options](src/unit_cell_gui/models.py)
+- [External partial updates](docs/partial-updates.md)
+- [Transparency behaviour](docs/hybrid-transparency.md)
+- [Validation and benchmarks](validation/README.md)
+- [Changelog](CHANGELOG.md) and [release notes](RELEASE_NOTES_0.2.5.md)
+- [MIT license](LICENSE)
 
 ## Used in
 
-`unit-cell-gui` is used as the crystal-structure viewer in [XRD Combine](https://github.com/ofussr/XRD-Combine), where it is integrated with CIF processing, diffraction tools, and synchronized crystallographic views.
+[**XRD Combine**](https://github.com/ofussr/XRD-Combine) uses `unit-cell-gui` for
+crystal-structure visualization alongside CIF processing, diffraction tools and
+synchronized crystallographic views.
 
 ## How to cite
 
@@ -175,47 +241,4 @@ If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
 
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22714946-blue.svg)](https://doi.org/10.5281/zenodo.22714946)
 
-You can also use the metadata provided in [`CITATION.cff`](CITATION.cff).
-
-## Shared GPU geometry (0.2.4)
-
-Atoms, camera-facing outlines, coloured bonds, polyhedron fill triangles,
-physical edges and engraving bonds use shared meshes and instance records.
-Camera changes keep geometry resident; depth-sorted edges update compact
-index lists. Large arrays are split at the driver's texture-buffer limit.
-Sphere tessellation remains 720 triangles per atom; no LOD is applied.
-
-Hatching uses intact polygons and the existing stroke algorithm. Line widths,
-antialiasing and transparency order are retained. In coloured mode, atom/face
-intersection curves use the corresponding face colour, including polyhedron
-colour overrides. Engraving keeps black intersection ink.
-
-## External partial updates (0.2.4)
-
-```python
-viewer.update_scene(
-    atom_positions={17: (x, y, z)},
-    atom_visibility={42: False},
-    polyhedra={3: updated_polyhedron},
-)
-```
-
-Original scene indices stay stable; positions are absolute Cartesian XYZ.
-Packets are validated atomically, copied and uploaded on the next paint.
-Only changed atoms, their existing adjacent bonds and affected polyhedra are
-updated; dependent sections and hatching refresh as needed.
-
-`set_atom_positions`, `set_atom_visibility` and `update_polyhedra` provide
-individual setters. `reset_scene_updates()` restores input geometry and local
-visibility while preserving camera and host styles. Effective-state getters
-are `get_atom_positions()`, `get_atom_visibility()` and `get_polyhedra()`.
-
-`viewer.scene` remains the original object; `set_scene()` clears the overrides.
-Call updates on the GUI thread. The host supplies updated polyhedra and bond
-topology; neither is inferred automatically. Local visibility respects host
-component/external-atom switches. A changed state draws a new frame without
-requiring a complete scene rebuild.
-
-See [the API contract](docs/partial-updates.md),
-[the external-control example](examples/partial_updates.py), and
-[changes since 0.2.3](RELEASE_NOTES_0.2.4.md).
+Citation metadata is available in [`CITATION.cff`](CITATION.cff).
