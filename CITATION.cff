@@ -3,10 +3,12 @@ title: unit-cell-gui
 message: "If you use this software, please cite it as below."
 type: software
 authors:
-  - family-names: Mirushchenko
-    given-names: Mikhail
-    orcid: "https://orcid.org/0000-0002-5571-8525"
+- family-names: Mirushchenko
+  given-names: Mikhail
+  orcid: https://orcid.org/0000-0002-5571-8525
 repository-code: https://github.com/ofussr/unit-cell-gui
 url: https://github.com/ofussr/unit-cell-gui
 version: 0.3.0
+date-released: 2026-11-26
+doi: 10.5281/zenodo.22714946
 license: MIT
