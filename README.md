@@ -27,14 +27,34 @@ calculations belong to the host application.
   </tr>
 </table>
 
+## What is new in 0.3.0
+
+Compared with 0.2.5, the renderer uses a bundled **Rust/PyO3 native extension**
+for exact transparency sorting, analytical atom/face contacts, batched OpenGL
+commands and GPU resource management. GLSL generates hatch lines and analytical
+sphere surfaces, using two triangles instead of 720 per sphere surface when
+supported. Common frame parameters are shared via a uniform buffer. Weighted
+blended OIT can process transparent geometry once instead of twice on compatible
+drivers.
+
+The public Python API and scene models are unchanged. PySide6 owns the widget
+and context; a private Qt-resolved binding handles remaining individual GL calls.
+PyOpenGL is no longer a runtime dependency. Corrected alpha blending and
+fractional-DPI sizing improve cross-platform rendering consistency.
+
+See the [changelog](CHANGELOG.md) for the full comparison with 0.2.5.
+
 ## Installation
 
 ```bash
 python -m pip install unit-cell-gui
 ```
 
-Requires **Python 3.10+**, NumPy, PySide6 Essentials, PyOpenGL and a working
+Requires **CPython 3.10+**, NumPy, PySide6 Essentials and a working
 **OpenGL 3.3 core-profile** driver. Python dependencies are installed by pip.
+Weighted transparency uses independent blending in one transparent geometry pass when supported (OpenGL 4.0 or ARB_draw_buffers_blend), otherwise two passes. PyOpenGL is only used by independent test probes, not by the library.
+Platform-specific binary wheels contain the native extension; building from
+source requires a Rust toolchain (edition 2024), a platform linker and Maturin.
 
 Import `UnitCellViewer` before creating `QApplication`, as in the example below.
 This configures the shared Qt/OpenGL format for applications with multiple
@@ -116,7 +136,9 @@ provides component/site colour and visibility mappings and opaque-site choices.
 The widget copies these mappings; each `set_style_overrides()` call replaces the
 complete override set.
 
-Shared GPU meshes keep geometry resident during camera changes. Hatching uses
+Shared GPU meshes and instance buffers keep geometry resident during camera changes.
+Analytical spheres use orthogonal camera transforms; other supported transforms
+use the mesh path. Hatching uses
 intact polygon faces, including quadrilaterals. Contact curves follow the face
 colour in colour mode and use black ink in engraving mode.
 
@@ -220,13 +242,48 @@ MSAA targets. If unavailable, the widget uses sorted rendering and shows the
 reason in the menu and `weighted_oit_error`. Its attachment budget is 256 MiB per
 widget. See [transparency details and resource limits](docs/hybrid-transparency.md).
 
+## Diagnostic backend selection
+
+Defaults select the optimized paths. To isolate rendering or driver issues, set
+an environment variable before starting the host application:
+
+| Variable | Default | Reference / fallback |
+| --- | --- | --- |
+| `UNIT_CELL_GUI_SORT_BACKEND` | `rust` | `python` |
+| `UNIT_CELL_GUI_HATCH_BACKEND` | `glsl` | `python` |
+| `UNIT_CELL_GUI_CONTACT_BACKEND` | `rust` | `python` |
+| `UNIT_CELL_GUI_ATOM_BACKEND` | `glsl` | `mesh` |
+| `UNIT_CELL_GUI_RENDER_BACKEND` | `rust` | `python` |
+| `UNIT_CELL_GUI_FRAME_BACKEND` | `rust` | `python` |
+| `UNIT_CELL_GUI_RESOURCE_BACKEND` | `rust` | `python` |
+| `UNIT_CELL_GUI_WBOIT_BACKEND` | `auto` | `dual` |
+
+These are diagnostic controls, not new public scene API. `dual` forces two
+transparent geometry passes. Selecting Python paths does not require PyOpenGL.
+
+## Building and testing
+
+From the source tree, with Rust, the platform compiler/linker and Python available:
+
+```sh
+python -m pip install maturin
+python -m pip install -e ".[test]"
+python -m maturin build --release --locked --out dist
+```
+
+The vendored source archive supports `python build.py --fresh --verify` with
+dependencies installed and a native Qt/OpenGL display. This verifies the built
+wheel. On headless Linux use Xvfb/Mesa. The local Linux helper emits a
+host-specific wheel, not a manylinux release wheel. See
+[release packaging](docs/release-packaging.md).
+
 ## Documentation
 
 - [Scene models and display/style options](src/unit_cell_gui/models.py)
 - [External partial updates](docs/partial-updates.md)
 - [Transparency behaviour](docs/hybrid-transparency.md)
 - [Validation and benchmarks](validation/README.md)
-- [Changelog](CHANGELOG.md) and [release notes](RELEASE_NOTES_0.2.5.md)
+- [Changelog](CHANGELOG.md)
 - [MIT license](LICENSE)
 
 ## Used in
@@ -237,7 +294,7 @@ synchronized crystallographic views.
 
 ## How to cite
 
-If you use `unit-cell-gui` in academic work, please cite the Zenodo record:
+If you use `unit-cell-gui` in academic work, please cite the existing Zenodo record for version 0.2.5 until a new version-specific DOI is available:
 
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22714946-blue.svg)](https://doi.org/10.5281/zenodo.22714946)
 

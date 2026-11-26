@@ -78,7 +78,7 @@ class VisibilityCacheTests(unittest.TestCase):
             self.viewer._rebuild_gpu_cache()
             self.viewer._rebuild_intersection_cache()
         with ExitStack() as stack:
-            for name in ("glBindVertexArray", "glEnable", "glBlendFunc", "glDepthMask", "glDisable", "glUseProgram"):
+            for name in ("glBindVertexArray", "glEnable", "glBlendFuncSeparate", "glDepthMask", "glDisable", "glUseProgram", "glUniform1f"):
                 stack.enter_context(patch.object(renderer, name))
             stack.enter_context(patch.object(self.viewer, "_set_edge_uniforms"))
             stack.enter_context(patch.object(self.viewer, "_set_instance_uniforms"))

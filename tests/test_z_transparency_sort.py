@@ -7,6 +7,7 @@ import numpy as np
 import shiboken6
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from OpenGL import GL
+from unit_cell_gui import _gl as binding
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 from unit_cell_gui import DisplayOptions, StyleOverrides, UnitCellViewer
@@ -138,7 +139,7 @@ class OpenGLGlobalOrderTests(unittest.TestCase):
 
     def test_all_forty_faces_are_drawn_and_msaa_is_retained_without_peeling_targets(self):
         self.viewer.set_scene(scene(tuple(face(str(i),'#4488cc',-.8+i*.04) for i in range(40))))
-        with patch.object(GL,'glTexImage2D') as texture,patch.object(GL,'glGenFramebuffers') as fbo, \
+        with patch.object(binding,'glTexImage2D') as texture,patch.object(binding,'glGenFramebuffers') as fbo, \
              patch.object(GL,'glBeginQuery') as query:
             pixels=self.pixels()
             texture.assert_not_called();fbo.assert_not_called();query.assert_not_called()
@@ -154,10 +155,13 @@ class OpenGLGlobalOrderTests(unittest.TestCase):
     def test_legacy_quality_flag_is_noop_and_context_recreation_preserves_frame(self):
         self.viewer.set_scene(scene((face('p','#4488cc',.3),face('q','#cc8844',-.3))))
         self.viewer.set_polyhedron_opacities({0:.35});original=self.pixels()
+        resource=self.viewer._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as allocate:
             self.viewer.set_display_options(transparency_supersampling=2)
             np.testing.assert_array_equal(self.pixels(),original)
             allocate.assert_not_called()
+            self.assertEqual(resource.uploads,before_alloc)
         self.viewer.cleanup();self.viewer.makeCurrent()
         try:self.viewer.initializeGL()
         finally:self.viewer.doneCurrent()
@@ -187,6 +191,8 @@ class OpenGLGlobalOrderTests(unittest.TestCase):
     def test_camera_keeps_geometry_resident_and_pan_reuses_visibility_order(self):
         self.viewer.set_scene(scene((face('p','#4488cc',.3),face('q','#cc8844',-.3))))
         self.pixels()
+        resource=self.viewer._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as allocate, \
              patch.object(renderer,'glBufferSubData',wraps=renderer.glBufferSubData) as upload, \
              patch.object(renderer,'back_to_front',wraps=renderer.back_to_front) as order:
@@ -194,6 +200,7 @@ class OpenGLGlobalOrderTests(unittest.TestCase):
             order.assert_not_called()
             self.viewer.set_orientation(np.array([[.8,0,.6],[0,1,0],[-.6,0,.8]]));self.pixels()
             order.assert_called_once();allocate.assert_not_called();upload.assert_not_called()
+            self.assertEqual((resource.uploads,resource.patches),(before_alloc,before_patch))
 
     def test_shared_faces_and_edges_keep_per_object_materials_and_ignore_input_order(self):
         original=adjacent_cubes(6)

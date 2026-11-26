@@ -1,0 +1,28 @@
+🍹 Building a mixed python/rust project
+🐍 Found CPython 3.13 at /opt/pyvenv/bin/python
+🔗 Found pyo3 bindings with abi3-py3.10 support
+   Compiling target-lexicon v0.13.3
+   Compiling proc-macro2 v1.0.103
+   Compiling unicode-ident v1.0.22
+   Compiling quote v1.0.42
+   Compiling autocfg v1.5.0
+   Compiling libc v0.2.177
+   Compiling memoffset v0.9.1
+   Compiling heck v0.5.0
+   Compiling once_cell v1.21.3
+   Compiling pyo3-build-config v0.27.2
+   Compiling indoc v2.0.7
+   Compiling unindent v0.2.4
+   Compiling syn v2.0.111
+   Compiling pyo3-ffi v0.27.2
+   Compiling pyo3-macros-backend v0.27.2
+   Compiling pyo3 v0.27.2
+   Compiling pyo3-macros v0.27.2
+   Compiling unit-cell-gui-native v0.3.0-beta.1 (/tmp/ucg-b1/unit-cell-gui-0.3.0a8)
+    Finished `release` profile [optimized] target(s) in 12.42s
+📦 Built wheel for abi3 Python ≥ 3.10 to /mnt/data/ucg-b1-dist/unit_cell_gui-0.3.0b1-cp310-abi3-linux_x86_64.whl
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+....................................................                     [100%]
+196 passed in 23.25s
+Wheel: /mnt/data/ucg-b1-dist/unit_cell_gui-0.3.0b1-cp310-abi3-linux_x86_64.whl

@@ -109,7 +109,14 @@ class OpenGLUpdatesTests(unittest.TestCase):
         bonds=[pair for pair in self.scene.bonds if visible[pair[0]] and visible[pair[1]]]
         scene=Scene(self.scene.atoms,centers,bonds,self.scene.cell_vertices,self.scene.cell_edges,
                     self.scene.basis_vectors,self.v.get_polyhedra(),self.scene.base_radius,self.scene.elements)
-        other=UnitCellViewer(); other.resize(self.v.size()); other.set_scene(scene)
+        other=UnitCellViewer()
+        # A top-level reference window may otherwise be placed on a different
+        # monitor by the window manager (notably on mixed-DPI Windows systems).
+        # Equal logical dimensions alone do not guarantee equal framebuffer sizes.
+        other.setScreen(self.v.screen())
+        other.resize(self.v.size())
+        other.move(self.v.pos())
+        other.set_scene(scene)
         other.set_display_options(show_polyhedra=True,engraving=self.v.engraving,atom_scale=self.v.atom_scale)
         other.set_style_overrides(StyleOverrides(atom_component_visibility=self.v.atom_component_visibility,
             polyhedron_site_visibility=self.v.polyhedron_site_visibility,
@@ -124,11 +131,17 @@ class OpenGLUpdatesTests(unittest.TestCase):
         other.pan_x=self.v.pan_x
         other.pan_y=self.v.pan_y
         other.show(); self.app.processEvents()
-        try: np.testing.assert_array_equal(self.pixels(),self.pixels(other))
+        try:
+            self.assertEqual(other.screen(), self.v.screen(), 'Reference window must use the same screen')
+            self.assertEqual(other.devicePixelRatioF(), self.v.devicePixelRatioF(),
+                             'Reference window must use the same device pixel ratio')
+            np.testing.assert_array_equal(self.pixels(),self.pixels(other))
         finally: other.close(); shiboken6.delete(other); self.app.processEvents()
 
     def test_one_atom_patches_only_its_rows_and_connected_bond(self):
         before=self.pixels(); untouched=self.v._bond_instance_data[2:].copy()
+        resource=self.v._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(self.v,'_rebuild_gpu_cache',wraps=self.v._rebuild_gpu_cache) as all_polys, \
              patch.object(self.v,'_build_atom_instances',wraps=self.v._build_atom_instances) as all_atoms, \
              patch.object(self.v,'_build_colour_bond_instances',wraps=self.v._build_colour_bond_instances) as bonds, \
@@ -138,6 +151,7 @@ class OpenGLUpdatesTests(unittest.TestCase):
             self.assertEqual(bonds.call_args.kwargs['bond_indices'],[0])
             # Only the affected polyhedron's variable-length section buffer may grow.
             self.assertTrue(all(call.args[1] < 50000 for call in allocate.call_args_list))
+            self.assertLess(resource.upload_bytes-before_bytes,50000)
         np.testing.assert_array_equal(self.v._bond_instance_data[2:],untouched)
         self.assertFalse(np.array_equal(self.pixels(),before)); self.reference()
         self.v.reset_scene_updates(); np.testing.assert_array_equal(self.pixels(),before)
@@ -202,11 +216,21 @@ class OpenGLUpdatesTests(unittest.TestCase):
             self.v.update_polyhedra({0:replace(poly,vertices=poly.vertices*1.03)})
             self.pixels(); allocate.assert_not_called()
         self.reference()
-        self.v.set_scene(None); self.pixels(); self.v.makeCurrent()
-        try:
+        # Include split texture-buffer chunks, and check deletion before Qt's
+        # painter/compositor can reuse the released OpenGL names.
+        for prefix in prefixes:
+            for buffer, texture, _ in self.v._primitive_chunks[prefix][1:]:
+                buffers.append(buffer); textures.append(texture)
+        release = self.v._release_scene_storage
+        def checked_release():
+            self.assertTrue(all(glIsBuffer(x) for x in buffers))
+            self.assertTrue(all(glIsTexture(x) for x in textures))
+            release()
             self.assertTrue(all(not glIsBuffer(x) for x in buffers))
             self.assertTrue(all(not glIsTexture(x) for x in textures))
-        finally: self.v.doneCurrent()
+        with patch.object(self.v,'_release_scene_storage',side_effect=checked_release) as called:
+            self.v.set_scene(None); self.pixels()
+            called.assert_called_once()
         self.v.set_scene(self.scene); self.pixels(); self.reference()
 
     def test_pending_hidden_layer_sections_refresh_when_enabled(self):
@@ -219,6 +243,8 @@ class OpenGLUpdatesTests(unittest.TestCase):
     def test_zero_length_bond_can_become_visible_without_reallocation(self):
         self.v.set_atom_positions({1:self.scene.atom_centers[0]}); self.pixels()
         np.testing.assert_array_equal(self.v._bond_instance_data[:2,3:9],np.zeros((2,6)))
+        resource=self.v._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as allocate:
             self.v.set_atom_positions({1:[1,0,0]}); self.pixels()
         self.reference()

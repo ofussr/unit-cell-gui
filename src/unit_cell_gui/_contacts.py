@@ -1,11 +1,39 @@
 """Reusable atom bounds and circle sampling for finite-face contact curves."""
 import math
+import os
 import numpy as np
 from ._spatial import BoundsIndex
 
 _ANGLES = [2.*math.pi*index/160 for index in range(160)]
 CIRCLE_COS = np.asarray([math.cos(angle) for angle in _ANGLES])[:, None]
 CIRCLE_SIN = np.asarray([math.sin(angle) for angle in _ANGLES])[:, None]
+
+def _pack(values):
+    return np.ascontiguousarray(values, dtype='<f8').tobytes()
+
+_GRID = _pack(np.column_stack((CIRCLE_COS, CIRCLE_SIN)))
+
+def native_contact_backend():
+    backend = os.environ.get('UNIT_CELL_GUI_CONTACT_BACKEND', 'rust').lower()
+    if backend == 'python':
+        return None
+    if backend != 'rust':
+        raise ValueError('UNIT_CELL_GUI_CONTACT_BACKEND must be rust or python')
+    try:
+        from ._ucg_native import contact_arcs
+    except ImportError:
+        return None
+    return contact_arcs
+
+def native_positions(frame, centres, radii, signed, kernel):
+    if not len(signed):
+        return np.empty((0,3), dtype=float)
+    if not hasattr(frame, '_packed'):
+        frame._packed = (_pack(frame.polygon), _pack(frame.side_normals),
+                         _pack([frame.normal, frame.u, frame.v]))
+    result = kernel(*frame._packed, _pack(np.column_stack((centres, radii, signed))), _GRID)
+    return np.frombuffer(result, dtype='<f8').reshape(-1,3)
+
 
 
 class ContactAtoms:

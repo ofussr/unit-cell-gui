@@ -54,13 +54,24 @@ class BoundsIndex:
             return
         self.low[ids], self.high[ids] = low, high
         dirty = {id(self.leaves[int(index)]): self.leaves[int(index)] for index in ids}
+        # Mark ancestors once, then refit deepest nodes first. Leaf depths can
+        # differ, so level-by-level walks from leaves are not sufficient.
+        ancestors = {}
         for leaf in dirty.values():
             leaf.low, leaf.high = self._envelope(leaf.ids)
             node = leaf.parent
-            while node is not None:
-                node.low = np.minimum(node.left.low, node.right.low)
-                node.high = np.maximum(node.left.high, node.right.high)
+            while node is not None and id(node) not in ancestors:
+                ancestors[id(node)] = node
                 node = node.parent
+        def depth(node):
+            level = 0
+            while node.parent is not None:
+                node = node.parent
+                level += 1
+            return level
+        for node in sorted(ancestors.values(), key=depth, reverse=True):
+            node.low = np.minimum(node.left.low, node.right.low)
+            node.high = np.maximum(node.left.high, node.right.high)
 
     def query(self, low, high):
         low, high = np.asarray(low), np.asarray(high)

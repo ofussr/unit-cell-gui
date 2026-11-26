@@ -107,8 +107,9 @@ class OpenGLAtomInstanceTests(unittest.TestCase):
         self.viewer.resize(640, 480)
         self.viewer.set_scene(atom_scene())
         self.viewer.set_display_options(engraving=True)
-        self.viewer.show()
-        self.app.processEvents()
+        with patch.dict(os.environ, {"UNIT_CELL_GUI_ATOM_BACKEND": "mesh"}):
+            self.viewer.show()
+            self.app.processEvents()
         if not self.viewer.isValid():
             self.viewer.close()
             self.skipTest("No OpenGL context could be created")
@@ -152,7 +153,8 @@ class OpenGLAtomInstanceTests(unittest.TestCase):
     def test_indexed_draw_and_material_changes_restore_frame_without_mesh_upload(self):
         before = self.pixels()
         mesh = self.viewer._atom_mesh_vbo
-        with patch.object(renderer, "glDrawElementsInstanced", wraps=renderer.glDrawElementsInstanced) as draw, \
+        with patch.object(self.viewer, "_native_gl", None), \
+             patch.object(renderer, "glDrawElementsInstanced", wraps=renderer.glDrawElementsInstanced) as draw, \
              patch.object(self.viewer, "_create_atom_buffer", wraps=self.viewer._create_atom_buffer) as create:
             self.viewer.set_display_options(atom_scale=1.4, engraving=False)
             self.assertFalse(np.array_equal(self.pixels(), before))
@@ -173,7 +175,8 @@ class OpenGLAtomInstanceTests(unittest.TestCase):
         try:
             self.assertTrue(all(not glIsBuffer(buffer) for buffer in buffers))
             self.assertEqual(self.viewer._atom_index_count, 0)
-            self.viewer.initializeGL()
+            with patch.dict(os.environ, {"UNIT_CELL_GUI_ATOM_BACKEND": "mesh"}):
+                self.viewer.initializeGL()
         finally:
             self.viewer.doneCurrent()
         np.testing.assert_array_equal(self.pixels(), before)

@@ -137,7 +137,8 @@ class OpenGLSceneInstanceTests(unittest.TestCase):
             glBindVertexArray(0); glBindBuffer(GL_ARRAY_BUFFER,0)
             self.assertEqual(glGetError(),GL_NO_ERROR)
         finally: self.viewer.doneCurrent()
-        with patch.object(renderer,'glDrawElementsInstanced',wraps=renderer.glDrawElementsInstanced) as cylinder, \
+        with patch.object(self.viewer, '_native_gl', None), \
+             patch.object(renderer,'glDrawElementsInstanced',wraps=renderer.glDrawElementsInstanced) as cylinder, \
              patch.object(self.viewer,'_draw_primitive_instances',wraps=self.viewer._draw_primitive_instances) as primitive, \
              patch.object(renderer,'glDrawArraysInstanced',wraps=renderer.glDrawArraysInstanced) as lines:
             self.pixels()
@@ -150,11 +151,14 @@ class OpenGLSceneInstanceTests(unittest.TestCase):
 
     def test_camera_visibility_and_style_preserve_shared_meshes_and_restore_frame(self):
         before=self.pixels(); meshes=(self.viewer._bond_mesh_vbo,self.viewer._bond_ebo,self.viewer._primitive_mesh_vbo)
+        resource=self.viewer._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as upload:
             self.viewer.set_orientation(rotation(0,44)@rotation(1,28)); self.viewer.zoom_by(1)
             self.pixels()
             self.viewer.set_style_overrides(StyleOverrides(polyhedron_site_visibility={'cube':False}))
             self.pixels(); upload.assert_not_called()
+            self.assertEqual(resource.uploads,before_alloc)
         self.viewer.set_style_overrides(StyleOverrides()); self.viewer.zoom_by(-1)
         self.viewer.set_orientation(rotation(0,19)@rotation(1,31))
         np.testing.assert_array_equal(self.pixels(),before)

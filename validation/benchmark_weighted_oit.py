@@ -51,7 +51,7 @@ class BenchViewer(UnitCellViewer):
             elapsed=(time.perf_counter()-start)*1000
             if query:GL.glEndQuery(GL.GL_TIME_ELAPSED)
         self.records.append({'step':step,'cpu_prepare_submit_ms':elapsed+self.setter_ms,
-                             'draw_calls':self.draws,'sort_calls':self.sorts,'geometry_upload_bytes':self.uploads,
+                             'draw_calls':self.draws+self._native_draw_calls,'sort_calls':self.sorts,'geometry_upload_bytes':self.uploads,
                              'weighted':self._last_frame_wboit,'paint_end':time.perf_counter()})
         if query:self.queries.append((step,query))
 

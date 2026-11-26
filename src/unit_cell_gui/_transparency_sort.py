@@ -369,3 +369,27 @@ def back_to_front(primitives, orientation, *, line_margin=0., line_depth_bias=0.
             if incoming[j]==0:
                 heapq.heappush(ready,(projected[j].key,j))
     return result,unresolved
+
+
+# Keep the original implementation accessible as a reference.
+back_to_front_python = back_to_front
+try:
+    from ._rust_sort_adapter import back_to_front_native
+except ImportError:
+    back_to_front_native = None
+
+
+def back_to_front(primitives, orientation, *, line_margin=0., line_depth_bias=0., stats=None):
+    """Use the native sorter when available; the Python reference is opt-in."""
+    import os
+    backend = os.environ.get('UNIT_CELL_GUI_SORT_BACKEND', 'rust').lower()
+    if backend not in ('python', 'rust'):
+        raise ValueError('UNIT_CELL_GUI_SORT_BACKEND must be rust or python')
+    if backend == 'python':
+        return back_to_front_python(primitives, orientation, line_margin=line_margin,
+                                    line_depth_bias=line_depth_bias, stats=stats)
+    if back_to_front_native is None:
+        raise RuntimeError('Native sorter unavailable; set UNIT_CELL_GUI_SORT_BACKEND=python to use the reference')
+    prepared = primitives if isinstance(primitives, PreparedPrimitives) else prepare_primitives(primitives)
+    return back_to_front_native(prepared, orientation, line_margin=line_margin,
+                                line_depth_bias=line_depth_bias, stats=stats)

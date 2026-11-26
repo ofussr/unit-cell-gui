@@ -1,6 +1,6 @@
-# Weighted transparency (0.2.5)
+# Weighted transparency
 
-The default and engraving renderers are unchanged. `DisplayOptions` adds two
+The public transparency controls are unchanged from 0.2.5. `DisplayOptions` has two
 trailing booleans `weighted_blended_oit_when_rotate=False` and
 `weighted_blended_oit=False`. The existing setter
 accepts this field. No external host changes or persistence mechanism are needed.
@@ -48,11 +48,13 @@ External movement does not synthesize an interaction_finished signal.
 `validation/prototype_weighted_oit.py` validates the chosen scheme before scene
 integration: a native opaque triangle and its WBOIT-base image are pixel-identical
 with zero and four requested MSAA samples; an occluded transparent layer is
-rejected. The implementation uses only OpenGL 3.3 functionality, with no
-independent blend extension and no depth blit between incompatible Qt targets.
+rejected. The two-pass implementation uses OpenGL 3.3 functionality and no depth blit
+between incompatible Qt targets. With OpenGL 4.0 or
+`GL_ARB_draw_buffers_blend`, the accumulation FBO also attaches the revealage
+texture for independent blending in one geometry pass, without extra storage.
 
 The component owns three colour textures, three FBOs, one depth renderbuffer,
-a fullscreen VAO and four programs (surface, edge, single/MS composition).
+a fullscreen VAO and shader programs for surface, edge and composition passes.
 Texture-buffer geometry and its VAOs remain owned by the widget. The GL program
 compiler helper is shared, but each resulting handle has exactly one owner.
 
@@ -89,7 +91,7 @@ includes the original geometry shader's feather coverage.
 For each accepted fragment with colour c and effective alpha a:
 
 - accumulation uses additive blending: `(c*a, a) * w`;
-- revealage starts at one and multiplies by `(1-a)` in the second pass;
+- revealage starts at one and multiplies by `(1-a)` in the same pass (or the second pass on fallback);
 - weighted colour is `accum.rgb / max(accum.a, 1e-8)`;
 - each final sample is `weighted_colour*(1-reveal) + opaque_colour*reveal`.
 
@@ -132,11 +134,13 @@ renderbuffer, depth/blend settings, write masks and changed enables are restored
 
 Fast frames bypass preparation of the exact order and the dependency graph.
 They reuse resident instance records, coalesce storage-contiguous ranges and
-make two unordered geometry passes plus composition. Common geometry updates
+make one unordered geometry pass plus composition when independent blending
+is supported, otherwise two. Failed combined setup falls back to two passes;
+`UNIT_CELL_GUI_WBOIT_BACKEND=dual` forces that path. Common geometry updates
 are still applied when the host actually changes a scene. With permanent mode off, end-of-motion sorting
 runs once for the last orientation, unless an existing exact cache already fits.
 
-Two extra transparent passes, per-sample composition and memory bandwidth are
+Transparent geometry passes, per-sample composition and memory bandwidth are
 real costs. On small scenes they can outweigh saved CPU sorting. Opt in based
 on measurements on the target GPU. The supplied benchmark separates CPU submit,
 GPU elapsed queries, frame intervals, draw/sort/upload counts, final-presentation

@@ -1,4 +1,4 @@
-# External partial scene updates (0.2.5.2)
+# External partial scene updates
 
 ## API
 
@@ -118,7 +118,8 @@ their prior appearance. Camera and input Scene remain unchanged.
 The package does not infer new bonds, move polyhedra automatically with atoms,
 change the lattice, refit the camera or mutate caller-owned data. The host
 supplies the updated polyhedron explicitly and remains responsible for topology.
-Existing public calls, aliases, signals and dependencies are retained.
+Existing public calls, aliases and signals are retained. PyOpenGL is no longer
+a runtime dependency.
 The optional trailing `DisplayOptions.transparency_supersampling` field
 (integer 1 or 2, default 1) remains accepted for compatibility with the earlier
 experimental build. It is now a no-op: hardware MSAA is retained directly.
@@ -127,13 +128,11 @@ No new fields are added to scene models.
 ## Installation and example
 
 ```powershell
-py -m pip install --force-reinstall --no-deps ".\dist\unit_cell_gui-0.2.5.2-py3-none-any.whl"
+py -m pip install unit-cell-gui
 py -c "import unit_cell_gui; print(unit_cell_gui.__version__)"
 py .\examples\partial_updates.py
 ```
 
 Use the application's Python environment and restart the application after
 installation. The example's external controls call the public batch API.
-See `RELEASE_NOTES_0.2.5.2.md` for this revision. The release archive contains
-`VALIDATION_0.2.5.2-audit.md` with checks and measurements. The version remains
-0.2.5.2 when replacing the earlier local build; use force-reinstall as shown.
+See the [changelog](../CHANGELOG.md) for changes since 0.2.5.

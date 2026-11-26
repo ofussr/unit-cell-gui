@@ -8,13 +8,15 @@ View-dependent hatching is cached per polyhedron and density.
 from __future__ import annotations
 
 import ctypes
+import sys
 import math
+import os
 import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
 
 import numpy as np
-from OpenGL.GL import (
+from ._gl import (
     GL_ARRAY_BUFFER,
     GL_TEXTURE_BUFFER,
     GL_MAX_TEXTURE_BUFFER_SIZE,
@@ -37,10 +39,12 @@ from OpenGL.GL import (
     GL_LINES,
     GL_LINK_STATUS,
     GL_MULTISAMPLE,
+    GL_ONE,
     GL_ONE_MINUS_SRC_ALPHA,
     GL_SRC_ALPHA,
     GL_STATIC_DRAW,
     GL_TRIANGLES,
+    GL_TRIANGLE_STRIP,
     GL_TRUE,
     GL_UNSIGNED_INT,
     GL_VERTEX_SHADER,
@@ -53,7 +57,7 @@ from OpenGL.GL import (
     glUniform1i,
     glBindBuffer,
     glBindVertexArray,
-    glBlendFunc,
+    glBlendFuncSeparate,
     glBufferData,
     glBufferSubData,
     glClear,
@@ -74,6 +78,7 @@ from OpenGL.GL import (
     glDrawElementsInstanced,
     glEnable,
     glEnableVertexAttribArray,
+    glDisableVertexAttribArray,
     glGenBuffers,
     glGenVertexArrays,
     glGetProgramInfoLog,
@@ -96,12 +101,16 @@ from OpenGL.GL import (
     glViewport,
 )
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal, QTimer, QEvent
-from PySide6.QtGui import QBrush, QColor, QFontMetrics, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QBrush, QColor, QFontMetrics, QPainter, QPen, QPolygonF, QOpenGLContext
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QSizePolicy, QMenu
 
 from .gl_geometry import indexed_cylinder_mesh, indexed_sphere_mesh, line_vertices, polygon_triangles
 from .hatching import hatch_division_count
+from ._native_resources import ResourceGL
+from ._frame_uniforms import FrameParameters, create_program as _create_ubo_program, frame_scope
+from ._analytic_atoms import shader_sources as _atom_shader_sources
+from ._gpu_hatching import VERTEX_SHADER as _HATCH_VERTEX_SHADER, pack_plans
 from .models import DisplayOptions, Scene, StyleOverrides
 from ._scene_updates import SceneView, prepare, same_polyhedron
 from ._transparency_sort import back_to_front, prepare_primitives, material_keys
@@ -109,7 +118,8 @@ from .qt_config import configure_qt_opengl, preferred_surface_format
 from .view_helpers import _polyhedron_hatches, screen_drag_orientation
 from ._numeric import (GPU_MAX, gpu_values, atom_radius, orientation_matrix,
                        scene_extent, camera_extent, fractions)
-from ._contacts import ContactAtoms, contact_faces, CIRCLE_COS, CIRCLE_SIN
+from ._contacts import (ContactAtoms, contact_faces, CIRCLE_COS, CIRCLE_SIN,
+                        native_contact_backend, native_positions)
 from ._weighted_oit import WeightedOIT, preserved_state
 
 
@@ -163,6 +173,9 @@ class _HatchBuffer:
     vbo: int
     count: int = 0
     geometry_key: tuple | None = None
+    texture: int = 0
+    faces: int = 0
+    max_lines: int = 0
 
 
 # Keep a few depth-density variants for each polyhedron at the current view.
@@ -730,6 +743,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._uniform_orientation = -1
         self._uniform_light = -1
         self._atom_program = 0
+        self._atom_analytic_program = 0
+        self._atom_analytic_vao = 0
+        self._atom_analytic_uniforms = {}
+        self.atom_analytic_error = None
+        self._last_atom_backend = 'mesh'
         self._atom_uniform_projection = -1
         self._atom_uniform_orientation = -1
         self._atom_uniform_light = -1
@@ -781,6 +799,13 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._segment_program = 0
         self._primitive_mesh_vbo = 0
         self._instance_uniforms: dict[int, dict[str, int]] = {}
+        self._native_gl = None
+        self._resource_gl = ResourceGL(None, sys.modules[__name__])
+        self.resource_error = None
+        self._frame_parameters = None
+        self.frame_uniform_error = None
+        self.native_render_error = None
+        self._native_draw_calls = 0
         self._primitive_chunks: dict[str, list[tuple[int, int, int]]] = {}
         self._primitive_texel_capacity = 65536
         self._bound_primitive_chunks: list[tuple[int, int, int]] = []
@@ -809,6 +834,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._hatch_draw_indices: tuple[int, ...] = ()
         self._hatch_buffers_need_clear = False
         self._hatch_count = 0
+        self._hatch_gpu_program = 0
+        self._hatch_gpu_uniforms = {}
+        self.hatch_gpu_error = None
         self._hatch_dirty = True
         self._atom_outline_vao = 0
         self._atom_outline_vbo = 0
@@ -1406,143 +1434,227 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         ) / float(normal[2])
         return np.array([x, y, z], dtype=float)
 
-    @staticmethod
-    def _create_buffer() -> tuple[int, int]:
-        vao = int(glGenVertexArrays(1))
-        vbo = int(glGenBuffers(1))
-        glBindVertexArray(vao)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(3 * 4))
-        glEnableVertexAttribArray(2)
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(6 * 4))
-        glEnableVertexAttribArray(3)
-        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(10 * 4))
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-        glBindVertexArray(0)
-        return vao, vbo
+    def _create_buffer(self) -> tuple[int, int]:
+        vao = vbo = 0
+        try:
+            vao = int(self._resource_gl.glGenVertexArrays(1))
+            vbo = int(self._resource_gl.glGenBuffers(1))
+            self._resource_gl.glBindVertexArray(vao)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            self._resource_gl.glEnableVertexAttribArray(0)
+            self._resource_gl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(0))
+            self._resource_gl.glEnableVertexAttribArray(1)
+            self._resource_gl.glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(3 * 4))
+            self._resource_gl.glEnableVertexAttribArray(2)
+            self._resource_gl.glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(6 * 4))
+            self._resource_gl.glEnableVertexAttribArray(3)
+            self._resource_gl.glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, _VERTEX_STRIDE, ctypes.c_void_p(10 * 4))
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
+            self._resource_gl.glBindVertexArray(0)
+            return vao, vbo
+        except BaseException:
+            # Both names are local until this factory succeeds.
+            if vbo: self._resource_gl.glDeleteBuffers(1, [vbo])
+            if vao: self._resource_gl.glDeleteVertexArrays(1, [vao])
+            raise
 
     def _create_atom_buffer(self) -> None:
         # Assign handles immediately so partial initialization can be cleaned up.
-        self._atom_vao = int(glGenVertexArrays(1))
-        self._atom_mesh_vbo = int(glGenBuffers(1))
-        self._atom_ebo = int(glGenBuffers(1))
-        self._atom_vbo = int(glGenBuffers(1))
-        glBindVertexArray(self._atom_vao)
+        self._atom_vao = int(self._resource_gl.glGenVertexArrays(1))
+        self._atom_mesh_vbo = int(self._resource_gl.glGenBuffers(1))
+        self._atom_ebo = int(self._resource_gl.glGenBuffers(1))
+        self._atom_vbo = int(self._resource_gl.glGenBuffers(1))
+        self._resource_gl.glBindVertexArray(self._atom_vao)
         positions, normals, indices = indexed_sphere_mesh()
         mesh = np.ascontiguousarray(np.concatenate((positions, normals), axis=1))
-        glBindBuffer(GL_ARRAY_BUFFER, self._atom_mesh_vbo)
-        glBufferData(GL_ARRAY_BUFFER, mesh.nbytes, mesh, GL_STATIC_DRAW)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._atom_mesh_vbo)
+        self._resource_gl.glBufferData(GL_ARRAY_BUFFER, mesh.nbytes, mesh, GL_STATIC_DRAW)
         for location, offset in ((0, 0), (1, 3)):
-            glEnableVertexAttribArray(location)
-            glVertexAttribPointer(
+            self._resource_gl.glEnableVertexAttribArray(location)
+            self._resource_gl.glVertexAttribPointer(
                 location, 3, GL_FLOAT, GL_FALSE, _ATOM_MESH_STRIDE, ctypes.c_void_p(offset * 4)
             )
-            glVertexAttribDivisor(location, 0)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self._atom_ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+            self._resource_gl.glVertexAttribDivisor(location, 0)
+        self._resource_gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self._atom_ebo)
+        self._resource_gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
         self._atom_index_count = int(indices.size)
 
-        glBindBuffer(GL_ARRAY_BUFFER, self._atom_vbo)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._atom_vbo)
         attributes = [(12, 4, 0)]
         attributes += [(location, 3, 4 + 3 * (location - 2)) for location in range(2, 10)]
         attributes += [(10, 4, 28), (11, 4, 32)]
         for location, size, offset in attributes:
-            glEnableVertexAttribArray(location)
-            glVertexAttribPointer(
+            self._resource_gl.glEnableVertexAttribArray(location)
+            self._resource_gl.glVertexAttribPointer(
                 location, size, GL_FLOAT, GL_FALSE, _ATOM_INSTANCE_STRIDE, ctypes.c_void_p(offset * 4)
             )
-            glVertexAttribDivisor(location, 1)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-        glBindVertexArray(0)
+            self._resource_gl.glVertexAttribDivisor(location, 1)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
+        self._resource_gl.glBindVertexArray(0)
 
-    @staticmethod
-    def _upload_static(vao: int, vbo: int, vertices: np.ndarray) -> int:
+    def _create_frame_program(self, *sources):
+        if self._frame_parameters is None:
+            return _create_program(*sources)
+        if not sources:
+            sources = (_VERTEX_SHADER, _FRAGMENT_SHADER)
+        return _create_ubo_program(_create_program, *sources)
+
+    def _initialize_analytic_atoms(self) -> None:
+        if os.environ.get('UNIT_CELL_GUI_ATOM_BACKEND', 'glsl').lower() == 'mesh':
+            return
+        try:
+            fmt = self.context().format()
+            core_40 = (fmt.majorVersion(), fmt.minorVersion()) >= (4, 0)
+            self._atom_analytic_program = self._create_frame_program(*_atom_shader_sources(core_40))
+            self._atom_analytic_uniforms = {name: glGetUniformLocation(self._atom_analytic_program, name)
+                for name in ('u_projection', 'u_orientation', 'u_light_dir', 'u_engraving')}
+            self._atom_analytic_vao = int(self._resource_gl.glGenVertexArrays(1))
+            self._resource_gl.glBindVertexArray(self._atom_analytic_vao)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._atom_vbo)
+            attributes = [(12, 4, 0)]
+            attributes += [(location, 3, 4 + 3 * (location - 2)) for location in range(2, 10)]
+            attributes += [(10, 4, 28), (11, 4, 32)]
+            for location, size, offset in attributes:
+                self._resource_gl.glEnableVertexAttribArray(location)
+                self._resource_gl.glVertexAttribPointer(location, size, GL_FLOAT, GL_FALSE, _ATOM_INSTANCE_STRIDE,
+                                      ctypes.c_void_p(offset * 4))
+                self._resource_gl.glVertexAttribDivisor(location, 1)
+            self._resource_gl.glBindVertexArray(0)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
+        except Exception as exc:
+            self.atom_analytic_error = str(exc) or type(exc).__name__
+            self._resource_gl.glBindVertexArray(0)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
+            if self._atom_analytic_vao:
+                self._resource_gl.glDeleteVertexArrays(1, [self._atom_analytic_vao])
+                self._atom_analytic_vao = 0
+            if self._atom_analytic_program:
+                glDeleteProgram(self._atom_analytic_program)
+                self._atom_analytic_program = 0
+            self._atom_analytic_uniforms = {}
+
+    def _draw_atoms(self) -> None:
+        # Preserve mesh semantics for general affine transforms (ellipsoids).
+        orientation = np.asarray(self.orientation, dtype=np.float32)
+        ortho = orientation.astype(float)
+        orthogonal = np.allclose(ortho @ ortho.T, np.eye(3), rtol=0., atol=2e-6)
+        if self._atom_analytic_program and orthogonal:
+            uniforms = self._atom_analytic_uniforms
+            if self._frame_parameters is not None:
+                self._frame_parameters.native.uniforms(self._atom_analytic_program, [],
+                    [(uniforms['u_engraving'], float(self.engraving))])
+            else:
+                glUseProgram(self._atom_analytic_program)
+                glUniformMatrix4fv(uniforms['u_projection'], 1, GL_TRUE, self._projection_matrix())
+                glUniformMatrix3fv(uniforms['u_orientation'], 1, GL_TRUE, orientation)
+                glUniform3f(uniforms['u_light_dir'], -0.35, 0.45, 0.82)
+                glUniform1f(uniforms['u_engraving'], 1.0 if self.engraving else 0.0)
+            submission = self._native_submission()
+            if submission is not None:
+                self._native_draw_calls += submission.draw_arrays_batch([(self._atom_analytic_vao, 0, int(GL_TRIANGLE_STRIP), 0, 4, self._atom_count)])
+            else:
+                self._resource_gl.glBindVertexArray(self._atom_analytic_vao)
+                glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, self._atom_count)
+            self._last_atom_backend = 'glsl'
+        else:
+            self._set_atom_uniforms()
+            submission = self._native_submission()
+            if submission is not None:
+                self._native_draw_calls += submission.draw_indexed(self._atom_vao, self._atom_index_count, self._atom_count)
+            else:
+                self._resource_gl.glBindVertexArray(self._atom_vao)
+                glDrawElementsInstanced(GL_TRIANGLES, self._atom_index_count, GL_UNSIGNED_INT,
+                                        ctypes.c_void_p(0), self._atom_count)
+            self._last_atom_backend = 'mesh'
+        self._resource_gl.glBindVertexArray(0)
+
+    def _upload_static(self, vao: int, vbo: int, vertices: np.ndarray) -> int:
         if not np.all(np.isfinite(vertices)) or np.any(np.abs(vertices) > GPU_MAX):
             raise ValueError('generated GPU records must be finite and float32-representable')
         vertices = np.ascontiguousarray(vertices, dtype=np.float32)
-        glBindVertexArray(vao)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-        glBindVertexArray(0)
+        if self._resource_gl.native is not None:
+            self._resource_gl.upload_static(vao, vbo, vertices)
+            return int(vertices.shape[0])
+        self._resource_gl.glBindVertexArray(vao)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        self._resource_gl.glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
+        self._resource_gl.glBindVertexArray(0)
         return int(vertices.shape[0])
 
     def _create_atom_outline_buffer(self) -> None:
-        self._atom_outline_vao = int(glGenVertexArrays(1))
-        self._atom_outline_mesh_vbo = int(glGenBuffers(1))
-        self._atom_outline_vbo = int(glGenBuffers(1))
-        glBindVertexArray(self._atom_outline_vao)
-        glBindBuffer(GL_ARRAY_BUFFER, self._atom_outline_mesh_vbo)
+        self._atom_outline_vao = int(self._resource_gl.glGenVertexArrays(1))
+        self._atom_outline_mesh_vbo = int(self._resource_gl.glGenBuffers(1))
+        self._atom_outline_vbo = int(self._resource_gl.glGenBuffers(1))
+        self._resource_gl.glBindVertexArray(self._atom_outline_vao)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._atom_outline_mesh_vbo)
         mesh = self._atom_outline_mesh()
-        glBufferData(GL_ARRAY_BUFFER, mesh.nbytes, mesh, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(0))
-        glVertexAttribDivisor(0, 0)
-        glBindBuffer(GL_ARRAY_BUFFER, self._atom_outline_vbo)
+        self._resource_gl.glBufferData(GL_ARRAY_BUFFER, mesh.nbytes, mesh, GL_STATIC_DRAW)
+        self._resource_gl.glEnableVertexAttribArray(0)
+        self._resource_gl.glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(0))
+        self._resource_gl.glVertexAttribDivisor(0, 0)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._atom_outline_vbo)
         for location, size, offset in ((1, 4, 0), (2, 4, 4), (3, 1, 8)):
-            glEnableVertexAttribArray(location)
-            glVertexAttribPointer(location, size, GL_FLOAT, GL_FALSE,
+            self._resource_gl.glEnableVertexAttribArray(location)
+            self._resource_gl.glVertexAttribPointer(location, size, GL_FLOAT, GL_FALSE,
                                   _OUTLINE_INSTANCE_STRIDE, ctypes.c_void_p(offset * 4))
-            glVertexAttribDivisor(location, 1)
-        glBindVertexArray(0)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+            self._resource_gl.glVertexAttribDivisor(location, 1)
+        self._resource_gl.glBindVertexArray(0)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     def _create_bond_buffer(self) -> None:
-        self._bond_vao = int(glGenVertexArrays(1))
-        self._bond_mesh_vbo = int(glGenBuffers(1))
-        self._bond_ebo = int(glGenBuffers(1))
-        self._bond_vbo = int(glGenBuffers(1))
+        self._bond_vao = int(self._resource_gl.glGenVertexArrays(1))
+        self._bond_mesh_vbo = int(self._resource_gl.glGenBuffers(1))
+        self._bond_ebo = int(self._resource_gl.glGenBuffers(1))
+        self._bond_vbo = int(self._resource_gl.glGenBuffers(1))
         vertices, indices = indexed_cylinder_mesh()
         self._bond_index_count = len(indices)
-        glBindVertexArray(self._bond_vao)
-        glBindBuffer(GL_ARRAY_BUFFER, self._bond_mesh_vbo)
-        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, ctypes.c_void_p(0))
-        glVertexAttribDivisor(0, 0)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self._bond_ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        glBindBuffer(GL_ARRAY_BUFFER, self._bond_vbo)
+        self._resource_gl.glBindVertexArray(self._bond_vao)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._bond_mesh_vbo)
+        self._resource_gl.glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+        self._resource_gl.glEnableVertexAttribArray(0)
+        self._resource_gl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, ctypes.c_void_p(0))
+        self._resource_gl.glVertexAttribDivisor(0, 0)
+        self._resource_gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self._bond_ebo)
+        self._resource_gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._bond_vbo)
         for location, size, offset in ((1, 3, 0), (2, 3, 3), (3, 3, 6), (4, 3, 9), (5, 4, 12)):
-            glEnableVertexAttribArray(location)
-            glVertexAttribPointer(location, size, GL_FLOAT, GL_FALSE, 64, ctypes.c_void_p(offset * 4))
-            glVertexAttribDivisor(location, 1)
-        glBindVertexArray(0)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+            self._resource_gl.glEnableVertexAttribArray(location)
+            self._resource_gl.glVertexAttribPointer(location, size, GL_FLOAT, GL_FALSE, 64, ctypes.c_void_p(offset * 4))
+            self._resource_gl.glVertexAttribDivisor(location, 1)
+        self._resource_gl.glBindVertexArray(0)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     def _create_primitive_buffer(self, prefix: str) -> None:
-        vao = int(glGenVertexArrays(1))
+        vao = int(self._resource_gl.glGenVertexArrays(1))
         setattr(self, prefix + '_vao', vao)
-        vbo = int(glGenBuffers(1))
+        vbo = int(self._resource_gl.glGenBuffers(1))
         setattr(self, prefix + '_vbo', vbo)
-        texture = int(glGenTextures(1))
+        texture = int(self._resource_gl.glGenTextures(1))
         setattr(self, prefix + '_texture', texture)
         self._primitive_chunks[prefix] = [(vbo, texture, 0)]
-        glBindVertexArray(vao)
-        glBindBuffer(GL_ARRAY_BUFFER, self._primitive_mesh_vbo)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 4, ctypes.c_void_p(0))
-        glVertexAttribDivisor(0, 0)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, 16, None, GL_STATIC_DRAW)
+        self._resource_gl.glBindVertexArray(vao)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._primitive_mesh_vbo)
+        self._resource_gl.glEnableVertexAttribArray(0)
+        self._resource_gl.glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 4, ctypes.c_void_p(0))
+        self._resource_gl.glVertexAttribDivisor(0, 0)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        self._resource_gl.glBufferData(GL_ARRAY_BUFFER, 16, None, GL_STATIC_DRAW)
         glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_BUFFER, texture)
-        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, vbo)
-        glBindTexture(GL_TEXTURE_BUFFER, 0)
+        self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, texture)
+        self._resource_gl.glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, vbo)
+        self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, 0)
         if prefix.endswith('_face_edge'):
-            setattr(self, prefix + '_order_vbo', int(glGenBuffers(1)))
+            setattr(self, prefix + '_order_vbo', int(self._resource_gl.glGenBuffers(1)))
             setattr(self, prefix + '_order_capacity', 0)
             setattr(self, prefix + '_order_records', None)
-            glBindBuffer(GL_ARRAY_BUFFER, getattr(self, prefix + '_order_vbo'))
-            glBufferData(GL_ARRAY_BUFFER, 4, None, GL_DYNAMIC_DRAW)
-            glEnableVertexAttribArray(1)
-            glVertexAttribIPointer(1, 1, GL_INT, 4, ctypes.c_void_p(0))
-            glVertexAttribDivisor(1, 1)
-        glBindVertexArray(0)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, getattr(self, prefix + '_order_vbo'))
+            self._resource_gl.glBufferData(GL_ARRAY_BUFFER, 4, None, GL_DYNAMIC_DRAW)
+            self._resource_gl.glEnableVertexAttribArray(1)
+            self._resource_gl.glVertexAttribIPointer(1, 1, GL_INT, 4, ctypes.c_void_p(0))
+            self._resource_gl.glVertexAttribDivisor(1, 1)
+        self._resource_gl.glBindVertexArray(0)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     def initializeGL(self) -> None:
         context = self.context()
@@ -1552,15 +1664,33 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._cleanup_context = context
         self._reset_gpu_objects()
         try:
+            self._resource_gl = ResourceGL(context, sys.modules[__name__])
+            self.resource_error = self._resource_gl.error
+            if os.environ.get('UNIT_CELL_GUI_FRAME_BACKEND', 'rust').lower() != 'python':
+                try:
+                    self._frame_parameters = FrameParameters(context, self._resource_gl)
+                except Exception as exc:
+                    self.frame_uniform_error = str(exc) or type(exc).__name__
             self._primitive_texel_capacity = int(glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE))
-            self._program = _create_program()
-            self._atom_program = _create_program(_ATOM_VERTEX_SHADER, _ATOM_FRAGMENT_SHADER)
-            self._edge_program = _create_program(
+            self._program = self._create_frame_program()
+            self._atom_program = self._create_frame_program(_ATOM_VERTEX_SHADER, _ATOM_FRAGMENT_SHADER)
+            self._edge_program = self._create_frame_program(
                 _EDGE_VERTEX_SHADER,
                 _EDGE_FRAGMENT_SHADER,
                 _EDGE_GEOMETRY_SHADER,
             )
-            self._atom_outline_program = _create_program(
+            if os.environ.get('UNIT_CELL_GUI_HATCH_BACKEND', 'glsl').lower() != 'python':
+                try:
+                    self._hatch_gpu_program = self._create_frame_program(
+                        _HATCH_VERTEX_SHADER, _EDGE_FRAGMENT_SHADER, _EDGE_GEOMETRY_SHADER)
+                    self._hatch_gpu_uniforms = {name: glGetUniformLocation(self._hatch_gpu_program, name)
+                        for name in ('u_projection','u_viewport','u_edge_width','u_depth_bias','u_hatch_records')}
+                except Exception as exc:
+                    self.hatch_gpu_error = str(exc)
+                    if self._hatch_gpu_program:
+                        glDeleteProgram(self._hatch_gpu_program)
+                    self._hatch_gpu_program = 0
+            self._atom_outline_program = self._create_frame_program(
                 _ATOM_OUTLINE_VERTEX_SHADER, _EDGE_FRAGMENT_SHADER, _EDGE_GEOMETRY_SHADER,
             )
             self._atom_outline_uniforms = {
@@ -1568,9 +1698,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 for name in ("u_projection", "u_orientation", "u_outline_padding",
                              "u_viewport", "u_edge_width", "u_depth_bias")
             }
-            self._bond_program = _create_program(_BOND_VERTEX_SHADER, _FRAGMENT_SHADER)
-            self._triangle_program = _create_program(_PRIMITIVE_VERTEX_SHADER, _FRAGMENT_SHADER)
-            self._segment_program = _create_program(
+            self._bond_program = self._create_frame_program(_BOND_VERTEX_SHADER, _FRAGMENT_SHADER)
+            self._triangle_program = self._create_frame_program(_PRIMITIVE_VERTEX_SHADER, _FRAGMENT_SHADER)
+            self._segment_program = self._create_frame_program(
                 _PRIMITIVE_VERTEX_SHADER, _EDGE_FRAGMENT_SHADER, _EDGE_GEOMETRY_SHADER,
             )
             uniform_names = ('u_projection', 'u_orientation', 'u_light_dir', 'u_records',
@@ -1579,13 +1709,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 program: {name: glGetUniformLocation(program, name) for name in uniform_names}
                 for program in (self._bond_program, self._triangle_program, self._segment_program)
             }
-            self._poly_opacity_vbo = int(glGenBuffers(1))
-            self._poly_opacity_texture = int(glGenTextures(1))
-            self._primitive_mesh_vbo = int(glGenBuffers(1))
-            glBindBuffer(GL_ARRAY_BUFFER, self._primitive_mesh_vbo)
+            self._poly_opacity_vbo = int(self._resource_gl.glGenBuffers(1))
+            self._poly_opacity_texture = int(self._resource_gl.glGenTextures(1))
+            self._primitive_mesh_vbo = int(self._resource_gl.glGenBuffers(1))
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._primitive_mesh_vbo)
             corners = np.array([0., 1., 2.], dtype=np.float32)
-            glBufferData(GL_ARRAY_BUFFER, corners.nbytes, corners, GL_STATIC_DRAW)
+            self._resource_gl.glBufferData(GL_ARRAY_BUFFER, corners.nbytes, corners, GL_STATIC_DRAW)
             self._create_atom_buffer()
+            self._initialize_analytic_atoms()
             self._create_primitive_buffer('_opaque')
             self._create_bond_buffer()
             self._cell_vao, self._cell_vbo = self._create_buffer()
@@ -1607,6 +1738,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._edge_uniform_width = glGetUniformLocation(self._edge_program, "u_edge_width")
             self._edge_uniform_depth_bias = glGetUniformLocation(self._edge_program, "u_depth_bias")
             self._edge_uniform_opacity = glGetUniformLocation(self._edge_program, "u_opacity")
+            if os.environ.get('UNIT_CELL_GUI_RENDER_BACKEND', 'rust').lower() != 'python':
+                try:
+                    from ._native_render import create_submission
+                    self._native_gl = create_submission(context)
+                except Exception as exc:
+                    self.native_render_error = str(exc) or type(exc).__name__
             self._restore_render_state()
             self._gpu_dirty = True
             self._atom_dirty = True
@@ -1616,8 +1753,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         except Exception as exc:
             self.opengl_error = str(exc)
 
+    def _framebuffer_size(self) -> tuple[int, int]:
+        # QOpenGLWidget allocates its FBO using QSize * devicePixelRatioF(),
+        # which rounds positive half-pixels up. Qt's paint viewport can instead
+        # truncate the product at fractional DPR (e.g. 501 * 1.5).
+        size = self.size() * self.devicePixelRatioF()
+        return max(1, size.width()), max(1, size.height())
+
     def resizeGL(self, width: int, height: int) -> None:
-        glViewport(0, 0, max(1, int(width)), max(1, int(height)))
         self._hatch_dirty = True
 
     def _restore_render_state(self) -> None:
@@ -2068,6 +2211,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         ranges: list[_PolyhedronRange] = []
         offset = 0
         circle_cos, circle_sin = CIRCLE_COS, CIRCLE_SIN
+        kernel = native_contact_backend()
         atoms = self._get_contact_atoms()
         atom_centres, atom_radii = atoms.centres, atoms.radii
         if not atoms.visible_count:
@@ -2089,6 +2233,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 in_box = np.all(atom_centres[candidates] >= bbox_min-atom_radii[candidates,None], axis=1)
                 in_box &= np.all(atom_centres[candidates] <= bbox_max+atom_radii[candidates,None], axis=1)
                 valid = in_box & (np.abs(signed) < atom_radii[candidates]-1e-8)
+                if kernel is not None:
+                    ids = candidates[valid]
+                    positions = native_positions(frame, atom_centres[ids], atom_radii[ids], signed[valid], kernel)
+                    if len(positions):
+                        block = _vertex_block(positions, np.zeros_like(positions), colour, lit=False)
+                        blocks.append(block)
+                        offset += len(block)
+                    continue
                 for atom_index, signed_distance in zip(candidates[valid], signed[valid]):
                     atom_center, atom_radius = atom_centres[atom_index], atom_radii[atom_index]
                     signed_distance = float(signed_distance)
@@ -2119,8 +2271,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def _delete_primitive_extras(self, prefix: str) -> None:
         chunks = self._primitive_chunks.get(prefix, [])
         for vbo, texture, _count in chunks[1:]:
-            glDeleteTextures(1, [texture])
-            glDeleteBuffers(1, [vbo])
+            self._resource_gl.glDeleteTextures(1, [texture])
+            self._resource_gl.glDeleteBuffers(1, [vbo])
         self._primitive_chunks[prefix] = chunks[:1]
 
     def _upload_primitive(self, prefix: str, records: np.ndarray) -> int:
@@ -2135,18 +2287,19 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             if first == 0:
                 vbo, texture = base_vbo, base_texture
             else:
-                vbo = int(glGenBuffers(1))
+                vbo = int(self._resource_gl.glGenBuffers(1))
                 chunks.append((vbo, 0, 0))
-                texture = int(glGenTextures(1))
+                texture = int(self._resource_gl.glGenTextures(1))
                 chunks[-1] = (vbo, texture, len(block))
             if first == 0:
                 chunks.append((vbo, texture, len(block)))
             self._upload_static(getattr(self, prefix + '_vao'), vbo, block)
             if first:
                 glActiveTexture(GL_TEXTURE0)
-                glBindTexture(GL_TEXTURE_BUFFER, texture)
-                glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, vbo)
-        glBindTexture(GL_TEXTURE_BUFFER, 0)
+                self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, texture)
+                self._resource_gl.glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, vbo)
+        if len(chunks) > 1:
+            self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, 0)
         return len(records)
 
     def _rebuild_gpu_cache(self) -> None:
@@ -2164,14 +2317,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._classified_poly_ranges = None
         self._poly_opacity_data = self.get_polyhedron_opacities().astype(np.float32).reshape(-1,1)
         if self._poly_opacity_vbo:
-            glBindBuffer(GL_ARRAY_BUFFER, self._poly_opacity_vbo)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, self._poly_opacity_vbo)
             records = self._poly_opacity_data if len(self._poly_opacity_data) else np.ones((1,1),np.float32)
-            glBufferData(GL_ARRAY_BUFFER, records.nbytes, records, GL_DYNAMIC_DRAW)
+            self._resource_gl.glBufferData(GL_ARRAY_BUFFER, records.nbytes, records, GL_DYNAMIC_DRAW)
             glActiveTexture(GL_TEXTURE0)
-            glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
-            glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, self._poly_opacity_vbo)
-            glBindTexture(GL_TEXTURE_BUFFER, 0)
-            glBindBuffer(GL_ARRAY_BUFFER, 0)
+            self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
+            self._resource_gl.glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, self._poly_opacity_vbo)
+            self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, 0)
+            self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
         self._pending_opacities.clear()
         self._gpu_dirty = False
         self._pending_polyhedra.clear()
@@ -2206,6 +2359,47 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         self._intersection_dirty = False
         self._pending_sections.clear()
 
+    def _gpu_hatch_plan(self, index, divisions):
+        polyhedron = self._display_scene.polyhedra[index]
+        vertices = np.asarray([self.orientation @ vertex for vertex in polyhedron.vertices], dtype=float)
+        projected = [self._project_camera_point(vertex) for vertex in vertices]
+        normals = {}; visible = []
+        for i, face in enumerate(polyhedron.faces):
+            points = vertices[list(face)]
+            normal = np.cross(points[1]-points[0], points[2]-points[0])
+            length = float(np.linalg.norm(normal))
+            if length < 1e-12: continue
+            normal /= length
+            normals[i] = normal
+            if float(normal[2]) > 1e-9: visible.append(i)
+        return pack_plans(polyhedron, vertices, projected, visible, normals, divisions,
+                          max(1e-4, 1e-3*float(self._display_scene.base_radius)))
+
+    def _upload_gpu_hatch_plan(self, buffer, index, divisions):
+        records, faces, maximum = self._gpu_hatch_plan(index, divisions)
+        if len(records) > min(self._primitive_texel_capacity, 2**24):
+            raise ValueError('hatch plan exceeds texture-buffer capacity')
+        if not np.all(np.isfinite(records)):
+            raise ValueError('hatch plan not representable in float32')
+        if not buffer.texture: buffer.texture = int(self._resource_gl.glGenTextures(1))
+        self._resource_gl.glBindBuffer(GL_TEXTURE_BUFFER, buffer.vbo)
+        glActiveTexture(GL_TEXTURE0)
+        try:
+            # Empty plans still have valid buffer storage; no instances drawn.
+            data = records if len(records) else np.zeros((1,4), np.float32)
+            self._resource_gl.glBufferData(GL_TEXTURE_BUFFER, data.nbytes, data, GL_DYNAMIC_DRAW)
+            self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, buffer.texture)
+            self._resource_gl.glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, buffer.vbo)
+        finally:
+            self._resource_gl.glBindTexture(GL_TEXTURE_BUFFER, 0)
+            self._resource_gl.glBindBuffer(GL_TEXTURE_BUFFER, 0)
+        # No attributes are consumed by the procedural vertex shader.
+        self._resource_gl.glBindVertexArray(buffer.vao)
+        for location in range(4): self._resource_gl.glDisableVertexAttribArray(location)
+        self._resource_gl.glBindVertexArray(0)
+        buffer.faces, buffer.max_lines = faces, maximum
+        return faces*maximum*2
+
     def _rebuild_hatch_cache(self) -> None:
         if not self.context() or not self.context().isValid():
             return
@@ -2218,8 +2412,22 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 self._hatch_buffers[index] = buffer
             geometry_key = (view_key, divisions, self._poly_revisions.get(index, 0))
             if buffer.geometry_key != geometry_key:
-                hatches = self._cached_polyhedron_hatches(index, divisions)
-                buffer.count = self._upload_static(buffer.vao, buffer.vbo, hatches)
+                if self._hatch_gpu_program:
+                    try:
+                        buffer.count = self._upload_gpu_hatch_plan(buffer, index, divisions)
+                    except Exception as exc:
+                        self.hatch_gpu_error = str(exc)
+                        if buffer.texture:
+                            self._resource_gl.glDeleteTextures(1, [buffer.texture]); buffer.texture = 0
+                        buffer.faces = buffer.max_lines = 0
+                        self._resource_gl.glBindVertexArray(buffer.vao)
+                        for location in range(4): self._resource_gl.glEnableVertexAttribArray(location)
+                        self._resource_gl.glBindVertexArray(0)
+                        hatches = self._cached_polyhedron_hatches(index, divisions)
+                        buffer.count = self._upload_static(buffer.vao, buffer.vbo, hatches)
+                else:
+                    hatches = self._cached_polyhedron_hatches(index, divisions)
+                    buffer.count = self._upload_static(buffer.vao, buffer.vbo, hatches)
                 buffer.geometry_key = geometry_key
         self._hatch_draw_indices = tuple(index for index, _divisions in plan)
         self._hatch_count = sum(self._hatch_buffers[index].count for index in self._hatch_draw_indices)
@@ -2228,8 +2436,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def _delete_hatch_buffers(self) -> None:
         """Called only while the widget's OpenGL context is current."""
         for buffer in self._hatch_buffers.values():
-            glDeleteBuffers(1, [buffer.vbo])
-            glDeleteVertexArrays(1, [buffer.vao])
+            if buffer.texture: self._resource_gl.glDeleteTextures(1, [buffer.texture])
+            self._resource_gl.glDeleteBuffers(1, [buffer.vbo])
+            self._resource_gl.glDeleteVertexArrays(1, [buffer.vao])
         self._hatch_buffers.clear()
         self._hatch_draw_indices = ()
         self._hatch_count = 0
@@ -2261,13 +2470,22 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         yield first, previous + 1
 
     def _patch_rows(self, vbo, data, rows) -> None:
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        if self._resource_gl.native is not None:
+            blocks=[]
+            for first, finish in self._row_runs(rows):
+                block=np.ascontiguousarray(data[first:finish])
+                if not np.all(np.isfinite(block)):
+                    raise ValueError('updated GPU records must be finite')
+                blocks.append((first*data.shape[1]*4,block))
+            if blocks:self._resource_gl.patch_rows(vbo,blocks)
+            return
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, vbo)
         for first, finish in self._row_runs(rows):
             block = np.ascontiguousarray(data[first:finish])
             if not np.all(np.isfinite(block)):
                 raise ValueError('updated GPU records must be finite')
-            glBufferSubData(GL_ARRAY_BUFFER, first * data.shape[1] * 4, block.nbytes, block)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+            self._resource_gl.glBufferSubData(GL_ARRAY_BUFFER, first * data.shape[1] * 4, block.nbytes, block)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     def _patch_primitive_rows(self, prefix, data, rows) -> None:
         rows = set(rows)
@@ -2300,11 +2518,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     value = getattr(self, prefix + suffix, 0)
                     if value:
                         if suffix == '_texture':
-                            glDeleteTextures(1, [value])
+                            self._resource_gl.glDeleteTextures(1, [value])
                         elif suffix == '_vao':
-                            glDeleteVertexArrays(1, [value])
+                            self._resource_gl.glDeleteVertexArrays(1, [value])
                         else:
-                            glDeleteBuffers(1, [value])
+                            self._resource_gl.glDeleteBuffers(1, [value])
                     if hasattr(self, prefix + suffix):
                         delattr(self, prefix + suffix)
                 for suffix in ('_order_records', '_order_capacity'):
@@ -2314,8 +2532,8 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
     def _delete_partial_section_buffers(self) -> None:
         for buffer in self._partial_section_gpu.values():
-            glDeleteBuffers(1, [buffer.vbo])
-            glDeleteVertexArrays(1, [buffer.vao])
+            self._resource_gl.glDeleteBuffers(1, [buffer.vbo])
+            self._resource_gl.glDeleteVertexArrays(1, [buffer.vao])
         self._partial_section_gpu.clear()
 
     def _update_one_polyhedron_gpu(self, index) -> None:
@@ -2431,6 +2649,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._pending_sections.clear()
 
     def _set_frame_uniforms(self) -> None:
+        if self._frame_parameters is not None:
+            glUseProgram(self._program)
+            return
         glUseProgram(self._program)
         glUniformMatrix4fv(self._uniform_projection, 1, GL_TRUE, self._projection_matrix())
         glUniformMatrix3fv(
@@ -2442,6 +2663,10 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glUniform3f(self._uniform_light, -0.35, 0.45, 0.82)
 
     def _set_atom_uniforms(self) -> None:
+        if self._frame_parameters is not None:
+            self._frame_parameters.native.uniforms(self._atom_program, [],
+                [(self._atom_uniform_engraving, float(self.engraving))])
+            return
         glUseProgram(self._atom_program)
         glUniformMatrix4fv(self._atom_uniform_projection, 1, GL_TRUE, self._projection_matrix())
         glUniformMatrix3fv(
@@ -2454,6 +2679,12 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glUniform1f(self._atom_uniform_engraving, 1.0 if self.engraving else 0.0)
 
     def _set_edge_uniforms(self, *, width_px: float = 1.575, depth_bias: float = 1.0e-5) -> None:
+        if self._frame_parameters is not None:
+            ratio = max(1., float(self.devicePixelRatioF()))
+            self._frame_parameters.native.uniforms(self._edge_program, [],
+                [(self._edge_uniform_width, width_px * ratio),
+                 (self._edge_uniform_depth_bias, depth_bias), (self._edge_uniform_opacity, 1.)])
+            return
         glUseProgram(self._edge_program)
         glUniformMatrix4fv(self._edge_uniform_projection, 1, GL_TRUE, self._projection_matrix())
         glUniformMatrix3fv(
@@ -2465,8 +2696,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         device_ratio = max(1.0, float(self.devicePixelRatioF()))
         glUniform2f(
             self._edge_uniform_viewport,
-            max(1.0, float(self.width()) * device_ratio),
-            max(1.0, float(self.height()) * device_ratio),
+            *self._framebuffer_size(),
         )
         glUniform1f(self._edge_uniform_width, float(width_px) * device_ratio)
         glUniform1f(self._edge_uniform_depth_bias, float(depth_bias))
@@ -2475,6 +2705,23 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
     def _set_instance_uniforms(self, program: int, record_texels: int = 0,
                                *, width_px: float = 1.575, depth_bias: float = 1e-5) -> None:
         uniforms = self._instance_uniforms[program]
+        if self._frame_parameters is not None:
+            ints, floats = [], []
+            if program != self._bond_program:
+                enabled = bool(self._scene_updates and self._scene_updates.opacity_overrides)
+                ints = [(uniforms[name], value) for name, value in (
+                    ('u_use_order', 0), ('u_records', 0), ('u_record_texels', record_texels),
+                    ('u_poly_opacities', 3), ('u_poly_opacities_enabled', int(enabled)))]
+                if enabled:
+                    glActiveTexture(GL_TEXTURE0 + 3)
+                    glBindTexture(GL_TEXTURE_BUFFER, self._poly_opacity_texture)
+                    glActiveTexture(GL_TEXTURE0)
+            if program == self._segment_program or (self._weighted_oit is not None
+                                                    and program == self._weighted_oit.segment_program):
+                ratio = max(1., float(self.devicePixelRatioF()))
+                floats = [(uniforms['u_edge_width'], width_px * ratio), (uniforms['u_depth_bias'], depth_bias)]
+            self._frame_parameters.native.uniforms(program, ints, floats)
+            return
         glUseProgram(program)
         glUniformMatrix4fv(uniforms['u_projection'], 1, GL_TRUE, self._projection_matrix())
         glUniformMatrix3fv(uniforms['u_orientation'], 1, GL_TRUE,
@@ -2495,8 +2742,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if program == self._segment_program or (self._weighted_oit is not None
                                                 and program == self._weighted_oit.segment_program):
             ratio = max(1., float(self.devicePixelRatioF()))
-            glUniform2f(uniforms['u_viewport'], max(1., self.width() * ratio),
-                        max(1., self.height() * ratio))
+            glUniform2f(uniforms['u_viewport'], *self._framebuffer_size())
             glUniform1f(uniforms['u_edge_width'], width_px * ratio)
             glUniform1f(uniforms['u_depth_bias'], depth_bias)
 
@@ -2533,18 +2779,28 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             return
         indices = np.asarray([index for item in ordered for index in range(item.first, item.first + item.count)],
                              dtype=np.int32)
-        glBindBuffer(GL_ARRAY_BUFFER, getattr(self, prefix + '_order_vbo'))
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, getattr(self, prefix + '_order_vbo'))
         if len(indices) > getattr(self, prefix + '_order_capacity'):
-            glBufferData(GL_ARRAY_BUFFER, indices.nbytes, None, GL_DYNAMIC_DRAW)
+            self._resource_gl.glBufferData(GL_ARRAY_BUFFER, indices.nbytes, None, GL_DYNAMIC_DRAW)
             setattr(self, prefix + '_order_capacity', len(indices))
             setattr(self, prefix + '_order_records', None)
         if getattr(self, prefix + '_order_records') is None or not np.array_equal(indices, getattr(self, prefix + '_order_records')):
-            glBufferSubData(GL_ARRAY_BUFFER, 0, indices.nbytes, indices)
+            self._resource_gl.glBufferSubData(GL_ARRAY_BUFFER, 0, indices.nbytes, indices)
             setattr(self, prefix + '_order_records', indices)
         uniforms = self._instance_uniforms[self._segment_program]
         glUniform1i(uniforms['u_use_order'], 1)
         chunks = self._bound_primitive_chunks
         capacity = chunks[0][2]
+        submission = self._native_submission()
+        if submission is not None:
+            try:
+                self._native_draw_calls += submission.draw_ordered_edges(uniforms['u_first'],
+                    [(texture,size) for _,texture,size in chunks], indices.tolist())
+                self._bound_instance_texture = 0
+            finally:
+                glUniform1i(uniforms['u_use_order'], 0)
+                self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
+            return
         # Runs retain the exact sorted edge order, even when storage is split
         # across texture buffers. The common single-buffer case is one draw.
         first = 0
@@ -2558,20 +2814,24 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 glBindTexture(GL_TEXTURE_BUFFER, texture)
                 self._bound_instance_texture = texture
             glUniform1i(uniforms['u_first'], chunk_index * capacity)
-            glVertexAttribIPointer(1, 1, GL_INT, 4, ctypes.c_void_p(first * 4))
+            self._resource_gl.glVertexAttribIPointer(1, 1, GL_INT, 4, ctypes.c_void_p(first * 4))
             glDrawArraysInstanced(GL_LINES, 0, 2, finish - first)
             first = finish
         glUniform1i(uniforms['u_use_order'], 0)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER, 0)
 
     def _draw_colour_bonds(self) -> None:
         if not self.show_bonds or self.engraving or self._bond_count <= 0:
             return
         self._set_instance_uniforms(self._bond_program)
-        glBindVertexArray(self._bond_vao)
-        glDrawElementsInstanced(GL_TRIANGLES, self._bond_index_count, GL_UNSIGNED_INT,
-                               ctypes.c_void_p(0), self._bond_count)
-        glBindVertexArray(0)
+        submission = self._native_submission()
+        if submission is not None:
+            self._native_draw_calls += submission.draw_indexed(self._bond_vao, self._bond_index_count, self._bond_count)
+        else:
+            glBindVertexArray(self._bond_vao)
+            glDrawElementsInstanced(GL_TRIANGLES, self._bond_index_count, GL_UNSIGNED_INT,
+                                   ctypes.c_void_p(0), self._bond_count)
+            glBindVertexArray(0)
 
     @staticmethod
     def _draw_buffer(vao: int, count: int, mode: int) -> None:
@@ -2585,6 +2845,27 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         return [item for item in ranges if self.polyhedron_site_visibility.get(item.site_key, True)
                 and (item.poly_index is None or self._polyhedron_opacity(item.poly_index) > 0)]
 
+    def _native_submission(self):
+        # Never dispatch on a foreign context, or outside Qt's current paint.
+        return (self._native_gl if self._native_gl is not None
+                and QOpenGLContext.currentContext() is self.context() else None)
+
+    def _submit_native_ranges(self, submission, items, *, merge=True):
+        descriptors, ranges, ids = [], [], {}
+        for edge, prefix, program, first, count in items:
+            key = (prefix, program, edge)
+            if key not in ids:
+                ids[key] = len(descriptors)
+                descriptors.append((program, getattr(self, prefix+'_vao'),
+                    self._instance_uniforms[program]['u_first'],
+                    int(GL_LINES if edge else GL_TRIANGLES),
+                    [(texture, size) for _, texture, size in self._primitive_chunks[prefix]]))
+            ranges.append((ids[key], first, count))
+        self._native_draw_calls += submission.draw_ranges(descriptors, ranges, merge)
+        # Any following legacy pass must bind its own storage.
+        self._bound_instance_texture = 0
+        self._bound_primitive_chunks = []
+
     def _draw_opaque_polyhedra(self) -> None:
         if not self.show_polyhedra:
             return
@@ -2592,6 +2873,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if not ranges:
             return
         self._set_instance_uniforms(self._triangle_program, 4)
+        submission = self._native_submission()
+        if submission is not None:
+            self._submit_native_ranges(submission, ((False, item.buffer_key or '_opaque',
+                self._triangle_program, item.first, item.count) for item in ranges), merge=False)
+            return
         bound = None
         for item in ranges:
             prefix = item.buffer_key or '_opaque'
@@ -2631,6 +2917,17 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._transparent_order_key = key
         return self._transparent_order
 
+    def _blend_pass(self, enabled):
+        if self._frame_parameters is not None:
+            self._frame_parameters.native.blend_pass(enabled)
+        elif enabled:
+            glEnable(GL_BLEND)
+            # RGB uses straight source alpha; coverage must not be squared.
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
+            glDepthMask(GL_FALSE)
+        else:
+            glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+
     def _draw_sorted_transparency(self) -> None:
         if not self.show_polyhedra:
             return
@@ -2641,9 +2938,14 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         # resident face and edge ranges in a single global visibility order.
         self._set_instance_uniforms(self._triangle_program,4)
         self._set_instance_uniforms(self._segment_program,3,width_px=1.575,depth_bias=1e-5)
-        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
-        glDepthMask(GL_FALSE)
+        self._blend_pass(True)
         try:
+            submission = self._native_submission()
+            if submission is not None:
+                self._submit_native_ranges(submission, ((edge, item.buffer_key or ('_face_edge' if edge else '_face'),
+                    self._segment_program if edge else self._triangle_program, item.first, item.count)
+                    for edge,item in ordered))
+                return
             bound = None
             runs = []
             for edge,item in ordered:
@@ -2660,7 +2962,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                     bound = (edge,prefix)
                 self._draw_primitive_instances(GL_LINES if edge else GL_TRIANGLES,first,count)
         finally:
-            glBindVertexArray(0); glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+            glBindVertexArray(0); self._blend_pass(False)
 
     def _draw_face_edges(self) -> None:
         if not self.show_polyhedra:
@@ -2671,7 +2973,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if not ordered:
             return
         self._set_instance_uniforms(self._segment_program, 3, width_px=1.575, depth_bias=1e-5)
-        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glDepthMask(GL_FALSE)
+        self._blend_pass(True)
         first = 0
         while first < len(ordered):
             prefix = ordered[first].buffer_key or '_face_edge'
@@ -2681,36 +2983,86 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._bind_primitive(getattr(self, prefix + '_vao'), getattr(self, prefix + '_texture'))
             self._draw_ordered_edge_instances(ordered[first:finish], prefix)
             first = finish
-        glBindVertexArray(0); glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+        glBindVertexArray(0); self._blend_pass(False)
+
+    def _set_hatch_gpu_uniforms(self):
+        u = self._hatch_gpu_uniforms
+        if self._frame_parameters is not None:
+            ratio = max(1.,float(self.devicePixelRatioF()))
+            self._frame_parameters.native.uniforms(self._hatch_gpu_program,
+                [(u['u_hatch_records'],0)], [(u['u_edge_width'],.75*ratio),(u['u_depth_bias'],1.5e-5)])
+            glActiveTexture(GL_TEXTURE0)
+            return
+        glUseProgram(self._hatch_gpu_program)
+        glUniformMatrix4fv(u['u_projection'],1,GL_TRUE,self._projection_matrix())
+        ratio = max(1.,float(self.devicePixelRatioF()))
+        glUniform2f(u['u_viewport'], *self._framebuffer_size())
+        glUniform1f(u['u_edge_width'],.75*ratio)
+        glUniform1f(u['u_depth_bias'],1.5e-5)
+        glUniform1i(u['u_hatch_records'],0)
+        glActiveTexture(GL_TEXTURE0)
 
     def _draw_hatches(self) -> None:
         if not self.show_polyhedra or not self.engraving or not self.hatching or self._hatch_count <= 0:
             return
-        self._set_edge_uniforms(width_px=0.75, depth_bias=1.5e-5)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glDepthMask(GL_FALSE)
-        for index in self._hatch_draw_indices:
-            buffer = self._hatch_buffers[index]
-            if buffer.count:
-                glBindVertexArray(buffer.vao)
-                glDrawArrays(GL_LINES, 0, buffer.count)
-        glBindVertexArray(0)
-        glDepthMask(GL_TRUE)
-        glDisable(GL_BLEND)
+        self._blend_pass(True)
+        bound = None
+        try:
+            submission = self._native_submission()
+            if submission is not None:
+                records = []
+                for index in self._hatch_draw_indices:
+                    buffer = self._hatch_buffers[index]
+                    if not buffer.count: continue
+                    mode = 'glsl' if buffer.texture else 'python'
+                    if bound != mode:
+                        if records:
+                            self._native_draw_calls += submission.draw_arrays_batch(records)
+                            records = []
+                        if mode == 'glsl': self._set_hatch_gpu_uniforms()
+                        else: self._set_edge_uniforms(width_px=.75,depth_bias=1.5e-5)
+                        bound = mode
+                    records.append((buffer.vao,buffer.texture,int(GL_LINES),0,
+                        2*buffer.max_lines if buffer.texture else buffer.count,
+                        buffer.faces if buffer.texture else -1))
+                if records:
+                    self._native_draw_calls += submission.draw_arrays_batch(records)
+                return
+            for index in self._hatch_draw_indices:
+                buffer = self._hatch_buffers[index]
+                if not buffer.count: continue
+                if buffer.texture:
+                    if bound != 'glsl':
+                        self._set_hatch_gpu_uniforms()
+                        bound = 'glsl'
+                    glBindTexture(GL_TEXTURE_BUFFER,buffer.texture)
+                    glBindVertexArray(buffer.vao)
+                    glDrawArraysInstanced(GL_LINES,0,2*buffer.max_lines,buffer.faces)
+                else:
+                    if bound != 'python':
+                        self._set_edge_uniforms(width_px=.75,depth_bias=1.5e-5)
+                        bound = 'python'
+                    glBindVertexArray(buffer.vao)
+                    glDrawArrays(GL_LINES,0,buffer.count)
+        finally:
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_BUFFER,0)
+            glBindVertexArray(0)
+            self._blend_pass(False)
 
     def _draw_engraving_bonds(self) -> None:
         if not self.show_bonds or not self.engraving or self._engraving_bond_count <= 0:
             return
         self._set_instance_uniforms(self._segment_program, 3, width_px=1.8, depth_bias=0.0)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glDepthMask(GL_FALSE)
-        self._bind_primitive(self._engraving_bond_vao, self._engraving_bond_texture)
-        self._draw_primitive_instances(GL_LINES, 0, self._engraving_bond_count)
+        self._blend_pass(True)
+        submission = self._native_submission()
+        if submission is not None:
+            self._submit_native_ranges(submission, [(True,'_engraving_bond',self._segment_program,0,self._engraving_bond_count)])
+        else:
+            self._bind_primitive(self._engraving_bond_vao, self._engraving_bond_texture)
+            self._draw_primitive_instances(GL_LINES, 0, self._engraving_bond_count)
         glBindVertexArray(0)
-        glDepthMask(GL_TRUE)
-        glDisable(GL_BLEND)
+        self._blend_pass(False)
 
     def _draw_atom_outlines(self) -> None:
         if not self.show_atoms or self._atom_outline_count <= 0:
@@ -2718,24 +3070,30 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         width_px = 0.9 if self.engraving else 0.95
         bias = 2.0e-5 if self.engraving else 1.4e-5
         uniforms = self._atom_outline_uniforms
-        glUseProgram(self._atom_outline_program)
-        glUniformMatrix4fv(uniforms["u_projection"], 1, GL_TRUE, self._projection_matrix())
-        glUniformMatrix3fv(uniforms["u_orientation"], 1, GL_TRUE,
-                           np.asarray(self.orientation, dtype=np.float32))
-        glUniform1f(uniforms["u_outline_padding"], 0.45 / max(self._screen_scale(), 1e-12))
-        device_ratio = max(1.0, float(self.devicePixelRatioF()))
-        glUniform2f(uniforms["u_viewport"], max(1.0, self.width() * device_ratio),
-                    max(1.0, self.height() * device_ratio))
-        glUniform1f(uniforms["u_edge_width"], width_px * device_ratio)
-        glUniform1f(uniforms["u_depth_bias"], bias)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glDepthMask(GL_FALSE)
-        glBindVertexArray(self._atom_outline_vao)
-        glDrawArraysInstanced(GL_LINES, 0, 2 * _OUTLINE_SEGMENTS, self._atom_outline_count)
-        glBindVertexArray(0)
-        glDepthMask(GL_TRUE)
-        glDisable(GL_BLEND)
+        if self._frame_parameters is not None:
+            ratio = max(1., float(self.devicePixelRatioF()))
+            self._frame_parameters.native.uniforms(self._atom_outline_program, [],
+                [(uniforms['u_outline_padding'], 0.45 / max(self._screen_scale(), 1e-12)),
+                 (uniforms['u_edge_width'], width_px * ratio), (uniforms['u_depth_bias'], bias)])
+        else:
+            glUseProgram(self._atom_outline_program)
+            glUniformMatrix4fv(uniforms["u_projection"], 1, GL_TRUE, self._projection_matrix())
+            glUniformMatrix3fv(uniforms["u_orientation"], 1, GL_TRUE,
+                               np.asarray(self.orientation, dtype=np.float32))
+            glUniform1f(uniforms["u_outline_padding"], 0.45 / max(self._screen_scale(), 1e-12))
+            device_ratio = max(1.0, float(self.devicePixelRatioF()))
+            glUniform2f(uniforms["u_viewport"], *self._framebuffer_size())
+            glUniform1f(uniforms["u_edge_width"], width_px * device_ratio)
+            glUniform1f(uniforms["u_depth_bias"], bias)
+        self._blend_pass(True)
+        submission = self._native_submission()
+        if submission is not None:
+            self._native_draw_calls += submission.draw_arrays_batch([(self._atom_outline_vao,0,int(GL_LINES),0,2*_OUTLINE_SEGMENTS,self._atom_outline_count)])
+        else:
+            glBindVertexArray(self._atom_outline_vao)
+            glDrawArraysInstanced(GL_LINES, 0, 2 * _OUTLINE_SEGMENTS, self._atom_outline_count)
+            glBindVertexArray(0)
+        self._blend_pass(False)
 
     def _draw_atom_face_intersections(self) -> None:
         if not self.show_atoms or not self.show_polyhedra:
@@ -2746,7 +3104,22 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         width_px = 1.0 if self.engraving else 0.95
         bias = 7.5e-6 if self.engraving else 8.5e-6
         self._set_edge_uniforms(width_px=width_px, depth_bias=bias)
-        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glDepthMask(GL_FALSE)
+        self._blend_pass(True)
+        submission = self._native_submission()
+        if submission is not None:
+            try:
+                records = []
+                for item in ranges:
+                    local_opacity = (self._scene_updates.opacity_overrides.get(item.poly_index)
+                                     if self._scene_updates else None)
+                    vao = (self._partial_section_gpu[item.poly_index].vao if item.buffer_key
+                           else self._intersection_vao)
+                    records.append((vao, item.first, item.count,
+                        self._polyhedron_opacity(item.poly_index) if local_opacity is not None else 1.0))
+                self._native_draw_calls += submission.draw_sections(self._edge_uniform_opacity, records)
+            finally:
+                glBindVertexArray(0); self._blend_pass(False)
+            return
         for item in ranges:
             local_opacity = (self._scene_updates.opacity_overrides.get(item.poly_index)
                              if self._scene_updates else None)
@@ -2756,7 +3129,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                    else self._intersection_vao)
             glBindVertexArray(vao)
             glDrawArrays(GL_LINES, item.first, item.count)
-        glBindVertexArray(0); glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+        glBindVertexArray(0); self._blend_pass(False)
 
     def _foreground_colour(self) -> QColor:
         return QColor(25, 25, 25) if self.engraving else self.palette().text().color()
@@ -2973,6 +3346,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         if not ranges:
             return
         self._set_instance_uniforms(program, 3 if edge else 4)
+        submission = self._native_submission()
+        if submission is not None:
+            self._submit_native_ranges(submission, ((edge, item.buffer_key or ('_face_edge' if edge else '_face'),
+                program, item.first, item.count) for item in ranges))
+            return
         # Unlike sorted transparency, arbitrary neighbouring ranges can be
         # submitted in storage order and coalesced without changing the result.
         runs = []
@@ -2987,19 +3365,20 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             self._draw_primitive_instances(GL_LINES if edge else GL_TRIANGLES,first,count,program=program)
         glBindVertexArray(0)
 
+    @frame_scope
     def _draw_weighted_frame(self, background):
-        from OpenGL import GL as gl
+        from . import _gl as gl
         try:
-            with preserved_state():
+            if self._weighted_oit is None:
+                self._weighted_oit = WeightedOIT(self._resource_gl)
+            oit = self._weighted_oit
+            with oit.preserve_indexed(), preserved_state(self._frame_parameters.native if self._frame_parameters is not None else None):
                 target = self.defaultFramebufferObject()
                 gl.glBindFramebuffer(gl.GL_FRAMEBUFFER,target)
                 samples = max(1,int(gl.glGetIntegerv(gl.GL_SAMPLES)))
                 viewport = gl.glGetIntegerv(gl.GL_VIEWPORT)
                 width,height = int(viewport[2]),int(viewport[3])
-                if self._weighted_oit is None:
-                    self._weighted_oit = WeightedOIT()
-                oit = self._weighted_oit
-                oit.initialize()
+                oit.initialize(self._create_frame_program)
                 self._instance_uniforms.update(oit.uniforms)
                 oit.ensure_size(width,height,samples)
                 oit.begin_scene((background.redF(),background.greenF(),background.blueF(),1.))
@@ -3007,11 +3386,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 self._draw_opaque_polyhedra()
                 self._draw_colour_bonds()
                 if self.show_atoms and self._atom_count:
-                    self._set_atom_uniforms()
-                    glBindVertexArray(self._atom_vao)
-                    glDrawElementsInstanced(GL_TRIANGLES,self._atom_index_count,GL_UNSIGNED_INT,
-                                           ctypes.c_void_p(0),self._atom_count)
-                    glBindVertexArray(0)
+                    self._draw_atoms()
                 # Same depth-tested ink base as the exact renderer. Transparent
                 # surfaces blend over it, never an unconditional overlay.
                 self._draw_atom_face_intersections()
@@ -3021,10 +3396,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 # rectangle's depth; the solid faces already supplied depth.
                 opaque_edges = self._weighted_ranges('face_edge',opaque=True)
                 if opaque_edges:
-                    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
-                    glDepthMask(GL_FALSE)
+                    self._blend_pass(True)
                     self._draw_weighted_ranges(opaque_edges,True,self._segment_program)
-                    glDepthMask(GL_TRUE); glDisable(GL_BLEND)
+                    self._blend_pass(False)
                 faces = self._weighted_ranges('face')
                 edges = self._weighted_ranges('face_edge')
                 # Half-float accumulators: a sample receives at most one
@@ -3032,22 +3406,33 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 # total by 1024 even for enormous resident geometry.
                 upper = sum(item.count for item in faces)+2*sum(item.count for item in edges)
                 weight_scale = min(1.,1024./max(1,upper))
-                for mode in (0,1):
-                    (oit.begin_revealage if mode else oit.begin_accumulation)()
+                combined = oit.begin_combined()
+                for mode in ((2,) if combined else (0,1)):
+                    if not combined:
+                        (oit.begin_revealage if mode else oit.begin_accumulation)()
                     for ranges, edge, program in ((faces,False,oit.triangle_program),
                                                   (edges,True,oit.segment_program)):
-                        glUseProgram(program)
-                        glUniform1i(oit.uniforms[program]['u_oit_pass'],mode)
-                        glUniform1f(oit.uniforms[program]['u_weight_scale'],weight_scale)
+                        if self._frame_parameters is not None:
+                            self._frame_parameters.native.uniforms(program,
+                                [(oit.uniforms[program]['u_oit_pass'],mode)],
+                                [(oit.uniforms[program]['u_weight_scale'],weight_scale)])
+                        else:
+                            glUseProgram(program)
+                            glUniform1i(oit.uniforms[program]['u_oit_pass'],mode)
+                            glUniform1f(oit.uniforms[program]['u_weight_scale'],weight_scale)
                         self._draw_weighted_ranges(ranges,edge,program)
-                oit.composite(target)
+                submission = self._native_submission()
+                if submission is not None:
+                    self._native_draw_calls += oit.composite(target, submission)
+                else:
+                    oit.composite(target)
             return True
         except Exception as exc:
             # An optional renderer failure must not poison the main renderer.
             self.weighted_oit_error = str(exc) or type(exc).__name__
             if self._weighted_oit is not None:
                 try:
-                    with preserved_state():
+                    with preserved_state(self._frame_parameters.native if self._frame_parameters is not None else None):
                         for program in self._weighted_oit.uniforms:
                             self._instance_uniforms.pop(program,None)
                         self._weighted_oit.cleanup()
@@ -3062,18 +3447,13 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             return False
 
+    @frame_scope
     def _draw_exact_scene(self):
         self._set_frame_uniforms()
         self._draw_opaque_polyhedra()
         self._draw_colour_bonds()
         if self.show_atoms and self._atom_count > 0:
-            self._set_atom_uniforms()
-            glBindVertexArray(self._atom_vao)
-            glDrawElementsInstanced(
-                GL_TRIANGLES, self._atom_index_count, GL_UNSIGNED_INT,
-                ctypes.c_void_p(0), self._atom_count,
-            )
-            glBindVertexArray(0)
+            self._draw_atoms()
             self._set_frame_uniforms()
 
         # Atom silhouette and atom/face intersection ink belong to the atom
@@ -3096,7 +3476,11 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         glUseProgram(0)
 
     def paintGL(self) -> None:
+        # Match the actual Qt FBO before drawing, even if Qt set a truncated
+        # viewport on entry. Both exact and weighted passes share these pixels.
+        glViewport(0, 0, *self._framebuffer_size())
         self._last_frame_wboit = False
+        self._native_draw_calls = 0
         # closeEvent releases GPU resources even when Qt keeps the context.
         # Qt need not call initializeGL again on show(), so rebuild here while
         # paintGL has the current context. Failed initialization is not retried
@@ -3218,8 +3602,23 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
             pass
 
     def _reset_gpu_objects(self) -> None:
+        self._native_gl = None
+        self._resource_gl = ResourceGL(None, sys.modules[__name__])
+        self.resource_error = None
+        self._frame_parameters = None
+        self.frame_uniform_error = None
+        self.native_render_error = None
+        self._native_draw_calls = 0
+        self._atom_analytic_program = 0
+        self._atom_analytic_vao = 0
+        self._atom_analytic_uniforms = {}
+        self.atom_analytic_error = None
+        self._last_atom_backend = 'mesh'
         self._weighted_oit = None
         self.weighted_oit_error = None
+        self._hatch_gpu_program = 0
+        self._hatch_gpu_uniforms = {}
+        self.hatch_gpu_error = None
         self._poly_opacity_vbo = 0
         self._poly_opacity_texture = 0
         self._poly_opacity_data = np.empty((0,1), np.float32)
@@ -3311,7 +3710,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
 
     def _release_scene_storage(self):
         if self._weighted_oit is not None:
-            with preserved_state():
+            with preserved_state(self._frame_parameters.native if self._frame_parameters is not None else None):
                 self._weighted_oit.release_attachments()
         self._delete_partial_poly_buffers()
         self._delete_partial_section_buffers()
@@ -3324,9 +3723,9 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                           '_engraving_bond_vbo','_face_edge_order_vbo','_poly_opacity_vbo'):
             vbo = getattr(self, attribute, 0)
             if vbo:
-                glBindBuffer(GL_ARRAY_BUFFER,vbo)
-                glBufferData(GL_ARRAY_BUFFER,0,None,GL_STATIC_DRAW)
-        glBindBuffer(GL_ARRAY_BUFFER,0)
+                self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER,vbo)
+                self._resource_gl.glBufferData(GL_ARRAY_BUFFER,0,None,GL_STATIC_DRAW)
+        self._resource_gl.glBindBuffer(GL_ARRAY_BUFFER,0)
         self._clear_scene_cpu_data()
         self._scene_storage_pending_clear = False
 
@@ -3344,14 +3743,19 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
         try:
             if can_delete:
                 self.makeCurrent()
+                # Qt makeCurrent() returns void and can fail without raising.
+                if QOpenGLContext.currentContext() is not context:
+                    raise RuntimeError("Could not make the renderer context current for cleanup")
                 current = True
+                if self._frame_parameters is not None:
+                    self._frame_parameters.cleanup()
                 if self._weighted_oit is not None:
                     self._weighted_oit.cleanup()
                     self._weighted_oit = None
                 if self._poly_opacity_texture:
-                    glDeleteTextures(1, [self._poly_opacity_texture])
+                    self._resource_gl.glDeleteTextures(1, [self._poly_opacity_texture])
                 if self._poly_opacity_vbo:
-                    glDeleteBuffers(1, [self._poly_opacity_vbo])
+                    self._resource_gl.glDeleteBuffers(1, [self._poly_opacity_vbo])
                 self._delete_partial_poly_buffers()
                 self._delete_partial_section_buffers()
                 self._delete_hatch_buffers()
@@ -3360,7 +3764,7 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 for attribute in ('_opaque_texture', '_face_texture', '_face_edge_texture', '_engraving_bond_texture'):
                     value = getattr(self, attribute)
                     if value:
-                        glDeleteTextures(1, [value])
+                        self._resource_gl.glDeleteTextures(1, [value])
                 for attribute in (
                     "_atom_vbo", "_atom_mesh_vbo", "_atom_ebo", "_opaque_vbo", "_bond_vbo", "_bond_mesh_vbo", "_bond_ebo", "_primitive_mesh_vbo", "_cell_vbo",
                     "_face_vbo", "_face_edge_vbo", "_face_edge_order_vbo",
@@ -3369,17 +3773,17 @@ class OpenGLUnitCellViewer(QOpenGLWidget):
                 ):
                     value = getattr(self, attribute)
                     if value:
-                        glDeleteBuffers(1, [value])
+                        self._resource_gl.glDeleteBuffers(1, [value])
                 for attribute in (
-                    "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
+                    "_atom_analytic_vao", "_atom_vao", "_opaque_vao", "_bond_vao", "_cell_vao",
                     "_face_vao", "_face_edge_vao",
                     "_atom_outline_vao", "_intersection_vao",
                     "_engraving_bond_vao",
                 ):
                     value = getattr(self, attribute)
                     if value:
-                        glDeleteVertexArrays(1, [value])
-                for attribute in ("_program", "_atom_program", "_edge_program", "_atom_outline_program", "_bond_program", "_triangle_program", "_segment_program"):
+                        self._resource_gl.glDeleteVertexArrays(1, [value])
+                for attribute in ("_program", "_atom_program", "_atom_analytic_program", "_edge_program", "_atom_outline_program", "_bond_program", "_triangle_program", "_segment_program", "_hatch_gpu_program"):
                     value = getattr(self, attribute)
                     if value:
                         glDeleteProgram(value)

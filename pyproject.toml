@@ -1,32 +1,53 @@
 [build-system]
-requires = ["setuptools>=77", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
 
 [project]
 name = "unit-cell-gui"
-version = "0.2.5"
-description = "PySide6 widget for rendering caller-supplied unit-cell scenes"
+version = "0.3.0"
+
+description = "PySide6/OpenGL crystal-structure widget with a Rust and GLSL rendering engine"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.txt", "RUST_DEPENDENCY_LICENSES.txt"]
 authors = [
     {name = "Mikhail Mirushchenko", email = "miruschenko98@gmail.com"},
 ]
 dependencies = [
     "numpy>=1.24",
     "PySide6-Essentials>=6.8,<7",
-    "PyOpenGL>=3.1.7,<4",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: X11 Applications :: Qt",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Visualization",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[project.urls]
+Homepage = "https://github.com/ofussr/unit-cell-gui"
+Repository = "https://github.com/ofussr/unit-cell-gui"
+Changelog = "https://github.com/ofussr/unit-cell-gui/blob/main/CHANGELOG.md"
 
-[tool.setuptools.package-data]
-unit_cell_gui = ["py.typed"]
+[project.optional-dependencies]
+test = ["pytest", "PyOpenGL>=3.1.7,<4"]
+
+[tool.maturin]
+module-name = "unit_cell_gui._ucg_native"
+python-source = "src"
+include = [
+    { path = "CHANGELOG.md", format = "sdist" },
+    { path = "CITATION.cff", format = "sdist" },
+    { path = "RELEASE_NOTES_0.2.5.md", format = "sdist" },
+    { path = "docs/**/*", format = "sdist" },
+    { path = "examples/*.py", format = "sdist" },
+    { path = "tests/*.py", format = "sdist" },
+    { path = "build.py", format = "sdist" },
+    { path = ".cargo/config.toml", format = "sdist" },
+    { path = "vendor/**/*", format = "sdist" },
+]
+exclude = ["**/__pycache__/**", "**/*.pyc"]

@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.3.0
+
+Changes since the published 0.2.5 release.
+
+### Performance and rendering
+
+- Move exact transparency ordering and dependency-graph processing to Rust,
+  retaining projected-depth ordering and diagnostics.
+- Generate and clip polyhedron hatch lines in GLSL, preserving face-direction,
+  density and continuity rules.
+- Compute atom/face contact arcs analytically in Rust before discretization,
+  including short arcs and more accurate boundary endpoints. Batch shared BVH
+  ancestor updates.
+- Render analytical atomic sphere surfaces with two triangles instead of 720,
+  calculating normals and depth in GLSL. Preserve lighting, partial occupancies
+  and MSAA; retain mesh rendering for nonorthogonal transforms or unsupported
+  shader configurations.
+- Submit batched OpenGL drawing commands from Rust and move buffer, texture,
+  VAO and framebuffer operations into the native extension. Batch partial
+  uploads and avoid intermediate array copies on CPython 3.11 and later.
+- Share camera and lighting parameters through a uniform buffer, skip redundant
+  uploads and preserve OpenGL state around weighted rendering.
+- Render WBOIT accumulation and revealage in one transparent geometry pass on
+  drivers supporting independent blending; retain two-pass and sorted fallbacks.
+
+### Fixed
+
+- Preserve opaque destination alpha during straight-alpha blending, including
+  Qt framebuffer readback on Windows and light or dark backgrounds.
+- Round framebuffer dimensions consistently with Qt at fractional display
+  scaling, including odd logical window sizes.
+- Preserve external texture bindings during WBOIT allocation and verify the
+  active OpenGL context before releasing resources.
+- Validate buffer sizes, offsets, payloads and resource counts in the private
+  GL binding; retain cleanup and fallback for failed optional GL operations.
+
+### Compatibility and packaging
+
+- Preserve the public Python API, exported names, scene models and host-owned
+  crystallographic data. No host migration is required at API level.
+- Remove the mandatory PyOpenGL runtime dependency. The bundled Rust/PyO3
+  extension and private Qt-resolved binding handle OpenGL operations;
+  PyOpenGL remains an optional test dependency.
+- Retain CPython 3.10+ and desktop OpenGL 3.3 core as minimum API targets.
+- Build platform-specific ABI3 wheels with Maturin and include Rust dependency
+  licenses. Provide an offline local build helper with automatic MSVC detection.
+- Extend numerical, rendering, fallback, resource-lifecycle and host-API tests.
+
 ## 0.2.5 - 2026-10-19
 
 Changes since the published 0.2.4 release:
@@ -41,44 +89,6 @@ Changes since 0.2.3:
 - Refresh contact colours after display-mode, style or polyhedron changes.
 - Preserve input Scene, camera, existing API/models, line widths, intact-polygon
   hatching and OpenGL 3.3 support. Add documentation and an external-control example.
-
-## 0.2.3.03 - 2026-10-13 (local experiment)
-
-- Add atomic indexed `update_scene` packets, atom coordinate/visibility setters,
-  polyhedron updates, reset and effective-state getters.
-- Keep original Scene data and camera unchanged; preserve host style restrictions.
-- Patch only changed atom/outline rows and existing adjacent bond records.
-- Give replaced polyhedra independent buffers; refresh only dependent sections
-  and hatching, preserving intact faces, transparency ordering and line styles.
-- Retain clipped stable slots for hidden atoms and degenerate bonds.
-- Coalesce GPU updates until paint and release dynamic resources with scene/context.
-- Include an external-control example and preserve existing API signatures.
-- Python packaging normalizes `0.2.3.03` to `0.2.3.3`.
-
-## 0.2.3.02 - 2026-10-12 (local experiment)
-
-- Render coloured half-bonds with one shared indexed cylinder.
-- Render polyhedron fill triangles, physical edges and engraving bonds
-  with shared primitives and compact instance records.
-- Preserve face/edge transparency ordering, physical shared-edge deduplication,
-  lighting, line widths, antialiasing and depth offsets on OpenGL 3.3.
-- Batch depth-sorted edges with a small integer order list while keeping
-  coordinates and colours resident.
-- Split primitive instance storage at the driver's texture-buffer limit.
-- Keep hatching and atom/face intersections unchanged; retain intact polygon
-  faces for hatching and preserve the public API.
-- Extend GL resource cleanup and reinitialization for the new passes.
-- Python packaging normalizes `0.2.3.02` to `0.2.3.2`.
-
-## 0.2.3.01 - 2026-10-08 (local experiment)
-
-- Render camera-facing atom silhouettes with a shared instanced ring.
-- Keep outline instance buffers resident during rotation, zoom and resize;
-  update camera transforms and cosmetic radius padding in the vertex shader.
-- Preserve solid/dashed outlines, depth testing, antialiasing and the existing
-  order relative to opaque and transparent scene geometry.
-- Clean up and recreate all new GL resources with the viewer context.
-- Python distribution metadata normalizes this version to `0.2.3.1`.
 
 ## 0.2.3 - 2026-10-06
 

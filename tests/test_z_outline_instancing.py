@@ -114,7 +114,8 @@ class OpenGLOutlineTests(unittest.TestCase):
 
     def test_camera_updates_without_outline_upload_and_style_restores_frame(self):
         before = self.pixels()
-        with patch.object(self.viewer, '_rebuild_atom_outline_cache', wraps=self.viewer._rebuild_atom_outline_cache) as build, \
+        with patch.object(self.viewer, '_native_gl', None), \
+             patch.object(self.viewer, '_rebuild_atom_outline_cache', wraps=self.viewer._rebuild_atom_outline_cache) as build, \
              patch.object(renderer, 'glDrawArraysInstanced', wraps=renderer.glDrawArraysInstanced) as draw:
             self.viewer.set_orientation(rotation(1, 33))
             self.viewer.zoom_by(2)

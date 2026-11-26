@@ -1,0 +1,10 @@
+🍹 Building a mixed python/rust project
+🐍 Found CPython 3.13 at /opt/pyvenv/bin/python
+🔗 Found pyo3 bindings with abi3-py3.10 support
+    Finished `release` profile [optimized] target(s) in 0.01s
+📦 Built wheel for abi3 Python ≥ 3.10 to /mnt/data/ucg-b1-dist/unit_cell_gui-0.3.0b1-cp310-abi3-linux_x86_64.whl
+........................................................................ [ 36%]
+........................................................................ [ 73%]
+....................................................                     [100%]
+196 passed in 27.79s
+Wheel: /mnt/data/ucg-b1-dist/unit_cell_gui-0.3.0b1-cp310-abi3-linux_x86_64.whl

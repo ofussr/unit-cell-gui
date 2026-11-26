@@ -8,8 +8,7 @@ from .hatching import (
     quadrilateral_hatch_line_count,
 )
 from .models import Atom, AtomComponent, DisplayOptions, Polyhedron, Scene, StyleOverrides
-__version__ = "0.2.5"
-
+__version__ = "0.3.0"
 
 def __getattr__(name):
     if name in {"configure_qt_opengl", "preferred_surface_format"}:

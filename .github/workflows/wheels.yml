@@ -1,0 +1,67 @@
+name: Build distribution packages
+on:
+  workflow_dispatch:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64
+            manylinux: '2_28'
+            interpreter: python3.13
+          - os: windows-2022
+            target: x86_64
+            manylinux: auto
+            interpreter: python
+          - os: macos-15-intel
+            target: x86_64
+            manylinux: auto
+            interpreter: python
+          - os: macos-15
+            target: aarch64
+            manylinux: auto
+            interpreter: python
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --locked --out dist -i ${{ matrix.interpreter }}
+      - name: Check metadata and import installed wheel
+        shell: bash
+        run: |
+          python -m pip install twine
+          python -m twine check --strict dist/*
+          python -m pip install dist/*.whl
+          python -c 'import unit_cell_gui; import unit_cell_gui._ucg_native; print(unit_cell_gui.__version__)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+  sdist:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: rustup update stable && rustup default stable
+      - run: python -m pip install maturin twine
+      - run: python -m maturin sdist --out dist
+      - run: python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-distribution
+          path: dist/*.tar.gz
+          if-no-files-found: error

@@ -1,0 +1,1694 @@
+{
+  "scale_factor": 1,
+  "comparisons": [
+    {
+      "comparison": "a7_vs_a8_exact",
+      "cases": [
+        {
+          "scene": "atoms-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "atoms-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "base-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "base-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-0-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-0-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-1-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-1-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-2-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-2-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-3-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-3-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-4-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-4-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-5-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-5-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "component-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "component-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "eight-ten-partial-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "eight-ten-partial-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "external-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "external-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-False-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-False-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-True-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-True-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "opaque-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "opaque-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-0-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-0-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-47-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-47-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-0-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-0-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-47-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-47-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "pentagon-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "pentagon-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "poly-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "poly-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "quad-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "quad-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "rotated-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "rotated-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "scaled-bw",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "scaled-color",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        }
+      ],
+      "n": 46,
+      "identical": 46,
+      "total_differing_pixels": 0,
+      "max_difference": 0,
+      "max_mean_difference": 0.0,
+      "pixels_gt_1": 0
+    },
+    {
+      "comparison": "a7_vs_a8_wboit",
+      "cases": [
+        {
+          "scene": "atoms-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "atoms-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "base-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "base-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-0-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-0-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-1-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-1-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-2-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-2-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-3-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-3-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-4-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-4-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-5-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-5-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "component-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "component-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "eight-ten-partial-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "eight-ten-partial-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "external-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "external-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-False-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-False-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-True-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-True-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "opaque-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "opaque-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-0-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-0-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-47-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-47-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-0-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-0-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-47-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-47-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "pentagon-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "pentagon-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "poly-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "poly-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "quad-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "quad-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "rotated-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "rotated-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "scaled-bw",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "scaled-color",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        }
+      ],
+      "n": 46,
+      "identical": 46,
+      "total_differing_pixels": 0,
+      "max_difference": 0,
+      "max_mean_difference": 0.0,
+      "pixels_gt_1": 0
+    },
+    {
+      "comparison": "a8_dual_vs_single",
+      "cases": [
+        {
+          "scene": "atoms-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "atoms-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "base-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "base-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-0-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-0-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-1-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-1-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-2-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-2-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-3-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-3-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-4-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-4-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-5-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "bond-axis-5-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "component-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "component-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "eight-ten-partial-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "eight-ten-partial-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "external-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "external-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-False-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-False-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-True-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "multiple-True-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "opaque-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "opaque-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-0-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-0-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-47-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-False-47-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-0-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-0-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-47-False",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "overlap-True-47-True",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "pentagon-False",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "pentagon-True",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "poly-hidden-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "poly-hidden-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "quad-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "quad-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "rotated-bw",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "rotated-color",
+          "shape": [
+            480,
+            640,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "scaled-bw",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        },
+        {
+          "scene": "scaled-color",
+          "shape": [
+            540,
+            760,
+            4
+          ],
+          "different_pixels": 0,
+          "max_difference": 0,
+          "mean_difference": 0.0,
+          "pixels_gt_1": 0
+        }
+      ],
+      "n": 46,
+      "identical": 46,
+      "total_differing_pixels": 0,
+      "max_difference": 0,
+      "max_mean_difference": 0.0,
+      "pixels_gt_1": 0
+    }
+  ]
+}

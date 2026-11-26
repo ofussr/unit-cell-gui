@@ -1,4 +1,4 @@
-# Reproducing the 0.2.5 checks
+# Reproducing renderer checks
 
 Run from the extracted project root with the package dependencies and pytest.
 Rendering checks require a working OpenGL 3.3 desktop display. The Qt offscreen
@@ -17,7 +17,7 @@ export QT_QPA_PLATFORM=xcb
 ```
 
 ```sh
-python -m pip install -e .
+python -m pip install -e ".[test]"
 python -m pytest -q tests
 python validation/check_installed.py
 python validation/render_regression_scenes.py --output /tmp/frames
@@ -46,13 +46,14 @@ outside the nonintersecting-face contract. The geometric-order and shared-face
 tests use supported inputs and independently checked overlap colours.
 
 ```sh
-python -m build
+python -m maturin build --release --locked --out dist
+python -m maturin sdist --out dist
 python -m twine check --strict dist/*
 ```
 
-The release ZIP includes recorded checks and images. Tests cover the stated
-Linux/Mesa environment; Windows/hardware GPU validation remains external.
-The current version is 0.2.5.
+Recorded checks include historical baselines. Linux/Mesa and Windows results
+are environment-specific; hardware timings and other platforms require
+separate validation.
 
 benchmark_sort.py reports CPU ordering alone, excluding Qt, GPU work and image
 readback. It records 30 samples per case by default, p50/p95, projected bounds
@@ -70,9 +71,8 @@ benchmark_transparency.py remains an end-to-end rotation/readback measurement,
 not a GPU timer. Neither predicts hardware frame rates from software rendering.
 
 
-Release notes compare with the published GitHub 0.2.4 release. Interim local
-0.2.5.x artifacts are not release baselines. If replacing an earlier local build
-that also used 0.2.5, force-reinstall the supplied wheel and restart the app.
+The 0.3.0 changelog compares with published 0.2.5. Historical reports retain
+their baselines. Force-reinstall a replacement wheel and restart the host.
 
 benchmark_updates.py records cold opacity updates separately from set_scene
 validation, cold atom/face contact preparation, and warmed atom setters plus

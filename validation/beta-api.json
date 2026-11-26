@@ -1,0 +1,49 @@
+{
+  "base_commit": "1671225e35c959c07d618368523f7f1247b6f0b2",
+  "version": "0.3.0b1",
+  "modules": {
+    "gl_geometry.py": {
+      "compared": 6,
+      "removed": [],
+      "changed": []
+    },
+    "hatching.py": {
+      "compared": 5,
+      "removed": [],
+      "changed": []
+    },
+    "models.py": {
+      "compared": 2,
+      "removed": [],
+      "changed": []
+    },
+    "opengl_viewer.py": {
+      "compared": 29,
+      "removed": [],
+      "changed": []
+    },
+    "qt_config.py": {
+      "compared": 2,
+      "removed": [],
+      "changed": []
+    },
+    "render_geometry.py": {
+      "compared": 9,
+      "removed": [],
+      "changed": []
+    },
+    "view_helpers.py": {
+      "compared": 1,
+      "removed": [],
+      "changed": []
+    },
+    "viewer.py": {
+      "compared": 0,
+      "removed": [],
+      "changed": []
+    }
+  },
+  "public_exports_equal": true,
+  "model_source_identical": true,
+  "total_signatures": 54
+}

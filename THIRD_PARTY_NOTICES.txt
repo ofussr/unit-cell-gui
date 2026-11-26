@@ -3,10 +3,9 @@ THIRD-PARTY NOTICES
 
 This file lists third-party software used by unit-cell-gui.
 
-unit-cell-gui itself is distributed under the MIT License. The projects listed
-below are separate dependencies and are not incorporated into the
-unit-cell-gui source code. When unit-cell-gui is installed with pip, these
-dependencies are installed as separate Python distributions.
+unit-cell-gui itself is distributed under the MIT License. The Python projects listed below are separate dependencies installed as
+separate Python distributions. Rust dependencies are compiled into the
+native extension or used during its build; see section 4.
 
 This notice is provided for attribution and convenience. The authoritative
 license terms are those distributed by the respective projects.
@@ -49,7 +48,7 @@ https://doc.qt.io/qtforpython-6/licenses.html
 -----------
 
 Project: PyOpenGL
-Required by unit-cell-gui: PyOpenGL>=3.1.7,<4
+Optional test-only dependency: PyOpenGL>=3.1.7,<4
 Homepage: https://pyopengl.sourceforge.net/
 Source: https://github.com/mcfletch/pyopengl
 License: BSD License
@@ -58,11 +57,20 @@ Author: Mike C. Fletcher and contributors.
 See the license distributed with PyOpenGL for the complete license text.
 
 
+4. Rust crates
+--------------
+
+The native extension is built using PyO3 and the Rust crates pinned in
+Cargo.lock. The vendored crate license texts (including build-time
+dependencies) are reproduced in RUST_DEPENDENCY_LICENSES.txt. The source
+archive also contains the original license files under vendor/.
+
+
 Notes
 -----
 
 The version ranges above describe the direct runtime dependencies declared by
-unit-cell-gui 0.2.1. Transitive dependencies may vary depending on the
+unit-cell-gui 0.3.0. Transitive dependencies may vary depending on the
 platform and the versions selected by the Python package installer.
 
 This file does not replace the license files supplied by third-party packages.

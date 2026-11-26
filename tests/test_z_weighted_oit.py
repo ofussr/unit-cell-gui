@@ -202,10 +202,13 @@ class WeightedGLTests(unittest.TestCase):
         finally:self.v.doneCurrent()
     def test_fast_has_no_sort_or_geometry_upload_and_final_frame_identical(self):
         self.fast()
+        resource=self.v._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'back_to_front',side_effect=AssertionError('sort in fast frame')), \
              patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as upload, \
              patch.object(renderer,'glBufferSubData',wraps=renderer.glBufferSubData) as patch_upload:
             self.fast(17);upload.assert_not_called();patch_upload.assert_not_called()
+            self.assertEqual((resource.uploads,resource.patches),(before_alloc,before_patch))
         self.v._external_rotation_stopped();final=self.pixels();self.assertFalse(self.v._last_frame_wboit)
         self.v.set_display_options(weighted_blended_oit_when_rotate=False)
         np.testing.assert_array_equal(final,self.pixels());self.gl_assert_clean()
@@ -236,7 +239,7 @@ class WeightedGLTests(unittest.TestCase):
         image=self.fast()
         centre=image[image.shape[0]//2,image.shape[1]//2,:3]
         expected=(np.array([255,0,0])*(1-(1-.0001)**256)
-                  +np.array([255,255,255])*(1-.0001)**256)
+                  +np.array(self.v.palette().base().color().getRgb()[:3],float)*(1-.0001)**256)
         np.testing.assert_allclose(centre,expected,atol=1)
 
     def test_atom_msaa_and_contacts_are_not_lost_and_final_is_exact(self):
@@ -248,6 +251,32 @@ class WeightedGLTests(unittest.TestCase):
         self.v._stop_camera_motion();self.pixels()
         self.v.set_orientation(rotation(0,23)@rotation(1,31));self.v._stop_camera_motion()
         np.testing.assert_array_equal(self.pixels(),exact);self.gl_assert_clean()
+    def test_odd_size_matches_qt_framebuffer_in_both_passes(self):
+        # Run with QT_SCALE_FACTOR=1.5 (or 1.25) to exercise half-pixel rounding.
+        self.v.resize(501,401)
+        self.app.processEvents()
+        for fast in (False, True):
+            self.v.set_display_options(weighted_blended_oit=fast,
+                                       weighted_blended_oit_when_rotate=False)
+            observed=[]
+            name='_draw_weighted_frame' if fast else '_draw_exact_scene'
+            original=getattr(self.v,name)
+            def capture(*args, **kwargs):
+                observed.append(tuple(map(int, GL.glGetIntegerv(GL.GL_VIEWPORT))))
+                return original(*args, **kwargs)
+            with patch.object(self.v,name,side_effect=capture):
+                pixels=self.pixels()
+            width,height=pixels.shape[1::-1]
+            self.assertTrue(observed)
+            self.assertTrue(all(v==(0,0,width,height) for v in observed))
+            self.assertEqual(self.v._framebuffer_size(),(width,height))
+            if fast:
+                self.assertTrue(self.v._last_frame_wboit)
+                self.assertEqual(self.v._weighted_oit.size[:2],(width,height))
+            if self.v._frame_parameters is not None:
+                values=np.frombuffer(self.v._frame_parameters.last,np.float32)
+                np.testing.assert_array_equal(values[32:34],[width,height])
+
     def test_resize_clear_close_reopen_resources_and_no_msaa(self):
         self.fast();oit=self.v._weighted_oit;handles=tuple(oit.textures);old_size=oit.size
         self.v.resize(501,401);self.fast(10)
@@ -329,11 +358,14 @@ class WeightedGLTests(unittest.TestCase):
             permanent=self.pixels();self.assertTrue(self.v._last_frame_wboit)
             self.v._finish_mouse_rotation();self.pixels();self.assertTrue(self.v._last_frame_wboit)
             QTest.qWait(180);np.testing.assert_array_equal(self.pixels(),permanent)
+        resource=self.v._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as allocate, \
              patch.object(renderer,'glBufferSubData',wraps=renderer.glBufferSubData) as upload:
             self.v.set_display_options(weighted_blended_oit=False)
             np.testing.assert_array_equal(self.pixels(),exact)
             allocate.assert_not_called();upload.assert_not_called()
+            self.assertEqual((resource.uploads,resource.patches),(before_alloc,before_patch))
         self.assertFalse(self.v._last_frame_wboit)
         self.gl_assert_clean()
 

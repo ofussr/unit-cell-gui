@@ -7,7 +7,7 @@ import numpy as np
 import shiboken6
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QColor, QPalette
 from OpenGL import GL
 from unit_cell_gui import StyleOverrides, UnitCellViewer
 from unit_cell_gui import opengl_viewer as renderer
@@ -78,17 +78,27 @@ class OpenGLOpacityTests(unittest.TestCase):
         return np.frombuffer(im.bits(),np.uint8,count=im.sizeInBytes()).copy().reshape(im.height(),im.width(),4)
     def centre(self,pixels): return pixels[pixels.shape[0]//2,pixels.shape[1]//2,:3]
 
+    def test_alpha_and_colour_on_light_and_dark_backgrounds(self):
+        for grey in (45,255):
+            palette=self.viewer.palette();palette.setColor(QPalette.ColorRole.Base,QColor(grey,grey,grey));self.viewer.setPalette(palette)
+            self.viewer.set_polyhedron_opacities({0:.25,1:.5})
+            pixels=self.pixels()
+            expected=.25*np.array([255,0,0])+.75*(.5*np.array([0,255,0])+.5*grey)
+            np.testing.assert_allclose(self.centre(pixels),expected,atol=1)
+            self.assertEqual(int(pixels[pixels.shape[0]//2,pixels.shape[1]//2,3]),255)
+
     def test_single_and_adjacent_opacity_updates_only_upload_material_floats(self):
         original=self.pixels()
-        with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as allocate, \
-             patch.object(renderer,'glBufferSubData',wraps=renderer.glBufferSubData) as upload, \
-             patch.object(self.viewer,'_build_static_geometry',wraps=self.viewer._build_static_geometry) as geometry:
+        resource=self.viewer._resource_gl
+        allocations, calls, size=resource.uploads,resource.patches,resource.patch_bytes
+        with patch.object(self.viewer,'_build_static_geometry',wraps=self.viewer._build_static_geometry) as geometry:
             self.viewer.set_polyhedron_opacities({0:.25}); self.pixels()
-            allocate.assert_not_called(); geometry.assert_not_called()
-            self.assertEqual([call.args[2] for call in upload.call_args_list],[4])
-            upload.reset_mock()
+            geometry.assert_not_called();self.assertEqual(resource.uploads,allocations)
+            self.assertEqual((resource.patches-calls,resource.patch_bytes-size),(1,4))
+            calls,size=resource.patches,resource.patch_bytes
             self.viewer.set_polyhedron_opacities({0:.4,1:.5}); self.pixels()
-            self.assertEqual([call.args[2] for call in upload.call_args_list],[8])
+            self.assertEqual(resource.uploads,allocations)
+            self.assertEqual((resource.patches-calls,resource.patch_bytes-size),(1,8))
         self.viewer.reset_scene_updates()
         np.testing.assert_array_equal(self.pixels(),original)
 
@@ -106,11 +116,15 @@ class OpenGLOpacityTests(unittest.TestCase):
 
     def test_native_opaque_buffer_can_become_transparent_without_reallocation(self):
         self.viewer.set_style_overrides(StyleOverrides(polyhedron_opaque_sites={'red','green'})); self.pixels()
+        resource=self.viewer._resource_gl
+        before_alloc,before_patch,before_bytes=resource.uploads,resource.patches,resource.upload_bytes
         with patch.object(renderer,'glBufferData',wraps=renderer.glBufferData) as allocate, \
              patch.object(self.viewer,'_build_static_geometry',wraps=self.viewer._build_static_geometry) as geometry:
             self.viewer.set_polyhedron_opacities({0:.25,1:.5}); pixels=self.pixels()
             allocate.assert_not_called(); geometry.assert_not_called()
-        expected=.25*np.array([255,0,0])+.75*(.5*np.array([0,255,0])+.5*np.array([255,255,255]))
+            self.assertEqual(resource.uploads,before_alloc)
+        background=np.array(self.viewer.palette().base().color().getRgb()[:3],float)
+        expected=.25*np.array([255,0,0])+.75*(.5*np.array([0,255,0])+.5*background)
         np.testing.assert_allclose(self.centre(pixels),expected,atol=1)
 
     def test_opacity_survives_context_recreation_and_set_scene_clears_it(self):
